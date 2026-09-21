@@ -39,6 +39,26 @@ function LoginScreen() {
   const [password, setPassword] = useState("");
   const [serverOpen, setServerOpen] = useState(false);
   const [serverAddress, setServerAddress] = useState("");
+  type Field = "server" | "mobile" | "password";
+  const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
+  const clearError = (key: Field) =>
+    setErrors((e) => {
+      if (!(key in e)) return e;
+      const next = { ...e };
+      delete next[key];
+      return next;
+    });
+  // Shows every problem under its field and focuses the first one.
+  const showProblems = (found: Partial<Record<Field, string>>) => {
+    setErrors(found);
+    const first = Object.keys(found)[0];
+    if (!first) return true;
+    toast.error("Please complete the highlighted fields", {
+      description: Object.values(found).join(" · "),
+    });
+    requestAnimationFrame(() => document.getElementById(first)?.focus());
+    return false;
+  };
 
   // Pre-select the captain who last used this handset - only when the staff
   // list itself changes, never in response to the captain tapping a chip.
@@ -122,7 +142,7 @@ function LoginScreen() {
 
         {serverOpen || serverDown ? (
           <div className="mt-3 space-y-2 rounded-2xl border border-dashed border-border bg-card p-3">
-            <Label htmlFor="server" className="text-xs">
+            <Label htmlFor="server" className="text-xs" required>
               Local server address {serverDown ? "· not reachable" : ""}
             </Label>
             <p className="text-[11px] text-muted-foreground">
@@ -133,14 +153,24 @@ function LoginScreen() {
                 id="server"
                 className="h-11"
                 value={serverAddress}
-                onChange={(e) => setServerAddress(e.target.value)}
+                aria-invalid={!!errors.server || undefined}
+                onChange={(e) => {
+                  setServerAddress(e.target.value);
+                  clearError("server");
+                }}
                 placeholder="192.168.1.12:4100"
                 inputMode="url"
               />
               <Button
                 className="h-11"
-                disabled={busy || !serverAddress.trim()}
+                disabled={busy}
                 onClick={async () => {
+                  if (
+                    !showProblems(
+                      serverAddress.trim() ? {} : { server: "Enter the server address" },
+                    )
+                  )
+                    return;
                   setBusy(true);
                   const ok = await setManualServerAddress(serverAddress);
                   setBusy(false);
@@ -154,6 +184,7 @@ function LoginScreen() {
                 Connect
               </Button>
             </div>
+            {errors.server ? <p className="text-xs text-destructive">{errors.server}</p> : null}
           </div>
         ) : null}
 
@@ -265,39 +296,55 @@ function LoginScreen() {
             className="mt-6 space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              if (!pwMobile.trim() || !password) return;
+              const found: Partial<Record<Field, string>> = {};
+              if (!/^\d{10}$/.test(pwMobile.trim()))
+                found.mobile = "Enter your 10-digit mobile number";
+              if (!password) found.password = "Password is required";
+              if (!showProblems(found)) return;
               void finish({ mode: "password", mobile: pwMobile.trim(), password });
             }}
           >
             <div className="space-y-1.5">
-              <Label htmlFor="mobile">Mobile number</Label>
+              <Label htmlFor="mobile" required>
+                Mobile number
+              </Label>
               <Input
                 id="mobile"
                 className="h-12"
                 inputMode="tel"
                 maxLength={10}
                 value={pwMobile}
-                onChange={(e) => setPwMobile(e.target.value.replace(/\D/g, ""))}
+                aria-invalid={!!errors.mobile || undefined}
+                onChange={(e) => {
+                  setPwMobile(e.target.value.replace(/\D/g, ""));
+                  clearError("mobile");
+                }}
                 placeholder="10-digit mobile number"
                 autoComplete="username"
               />
+              {errors.mobile ? <p className="text-xs text-destructive">{errors.mobile}</p> : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" required>
+                Password
+              </Label>
               <Input
                 id="password"
                 type="password"
                 className="h-12"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={!!errors.password || undefined}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  clearError("password");
+                }}
                 autoComplete="current-password"
               />
+              {errors.password ? (
+                <p className="text-xs text-destructive">{errors.password}</p>
+              ) : null}
             </div>
-            <Button
-              type="submit"
-              className="h-13 w-full text-base"
-              disabled={busy || !pwMobile || !password}
-            >
+            <Button type="submit" className="h-13 w-full text-base" disabled={busy}>
               {busy ? "Signing in…" : "Sign in"}
             </Button>
             <button

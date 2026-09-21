@@ -101,7 +101,9 @@ export function CustomerFields({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="cust-mobile">Mobile number</Label>
+        <Label htmlFor="cust-mobile" required>
+          Mobile number
+        </Label>
         <div className="relative">
           <Input
             id="cust-mobile"
@@ -111,6 +113,7 @@ export function CustomerFields({
             inputMode="numeric"
             placeholder="10-digit mobile number"
             value={value.mobile}
+            aria-invalid={(showErrors && !!errors.mobile) || undefined}
             onFocus={() => setListOpen(true)}
             onBlur={() => setTimeout(() => setListOpen(false), 150)}
             onChange={(e) => {
@@ -184,6 +187,7 @@ export function CustomerFields({
           autoComplete="off"
           maxLength={15}
           value={value.gstin}
+          aria-invalid={(showErrors && !!errors.gstin) || undefined}
           onChange={(e) =>
             onChange({ ...value, gstin: e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, "") })
           }
