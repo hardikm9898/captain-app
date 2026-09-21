@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   Star,
   Timer,
+  UserRound,
   Users,
 } from "lucide-react";
 import { AppShell, ScreenHeader, SHELL_WIDTH } from "@/components/captain/AppShell";
@@ -22,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { QtyStepper } from "@/components/captain/QtyStepper";
+import { CustomerDetailsDialog } from "@/components/captain/CustomerForm";
 import { elapsed, inr } from "@/lib/captain/format";
 import { currentRoundOf, orderTotals, useCaptain, type KotResult } from "@/lib/captain/store";
 import type { MenuItem } from "@/lib/captain/types";
@@ -54,6 +56,7 @@ function OrderMenu() {
     fireKot,
     holdOrder,
     setGuests,
+    setCustomer,
     blocked,
     booting,
   } = useCaptain();
@@ -68,6 +71,7 @@ function OrderMenu() {
   const [cartOpen, setCartOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [guestEditorOpen, setGuestEditorOpen] = useState(false);
+  const [customerOpen, setCustomerOpen] = useState(false);
   const [guestDraft, setGuestDraft] = useState(2);
   const [busy, setBusy] = useState<"fire" | "hold" | null>(null);
   const [kotToast, setKotToast] = useState<KotResult | null>(null);
@@ -219,6 +223,11 @@ function OrderMenu() {
                     {order.guests ? `${order.guests} guests` : "Add guests"}
                   </button>
                 )}
+                {order.customerName || order.mobile ? (
+                  <span className="max-w-[9rem] truncate">
+                    {order.customerName || order.mobile} ·{" "}
+                  </span>
+                ) : null}
                 <span>
                   {readOnly ? "" : " · "}
                   {elapsed(order.openedAt)}
@@ -236,6 +245,21 @@ function OrderMenu() {
           }
           right={
             <div className="flex items-center gap-2">
+              {!readOnly ? (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="relative h-10 w-10"
+                  aria-label="Customer"
+                  data-customer-open
+                  onClick={() => setCustomerOpen(true)}
+                >
+                  <UserRound className="h-4 w-4" />
+                  {order.mobile ? (
+                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand" />
+                  ) : null}
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 size="icon"
@@ -364,7 +388,7 @@ function OrderMenu() {
                         </span>
                         <span className="truncate text-sm font-semibold">{item.name}</span>
                         {item.favourite ? (
-                          <Star className="h-3.5 w-3.5 shrink-0 fill-st-held text-st-held" />
+                          <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-500" />
                         ) : null}
                         {sentQty > 0 ? (
                           <span className="shrink-0 rounded-full bg-st-running-soft px-1.5 py-0.5 text-[10px] font-semibold text-st-running">
@@ -511,6 +535,25 @@ function OrderMenu() {
           BillerPe.
         </p>
       ) : null}
+      <CustomerDetailsDialog
+        open={customerOpen}
+        onOpenChange={setCustomerOpen}
+        initial={{
+          mobile: order.mobile,
+          name: order.customerName,
+          address: order.address,
+          gstin: order.gstin,
+        }}
+        onSave={(v) => {
+          setCustomer(order.id, {
+            customerName: v.name,
+            mobile: v.mobile,
+            address: v.address,
+            gstin: v.gstin,
+          });
+          toast.success("Customer saved - it goes to the bill with the next KOT");
+        }}
+      />
     </AppShell>
   );
 }

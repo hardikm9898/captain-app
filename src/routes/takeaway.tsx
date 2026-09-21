@@ -3,8 +3,12 @@ import { useState } from "react";
 import { ArrowLeft, ArrowRight, ShoppingBag } from "lucide-react";
 import { AppShell, ScreenHeader } from "@/components/captain/AppShell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  CustomerFields,
+  customerErrors,
+  EMPTY_CUSTOMER,
+  type CustomerValues,
+} from "@/components/captain/CustomerForm";
 import { useCaptain } from "@/lib/captain/store";
 
 export const Route = createFileRoute("/takeaway")({
@@ -24,8 +28,8 @@ export const Route = createFileRoute("/takeaway")({
 function TakeAway() {
   const { startTakeaway, blocked } = useCaptain();
   const navigate = useNavigate();
-  const [name, setName] = useState("");
-  const [mobile, setMobile] = useState("");
+  const [customer, setCustomer] = useState<CustomerValues>(EMPTY_CUSTOMER);
+  const [showErrors, setShowErrors] = useState(false);
 
   return (
     <AppShell
@@ -53,35 +57,30 @@ function TakeAway() {
           </p>
         </div>
 
-        <div className="mt-5 space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="ta-name">Customer name</Label>
-            <Input
-              id="ta-name"
-              className="h-12"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Nirav Patel"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="ta-mobile">Mobile number</Label>
-            <Input
-              id="ta-mobile"
-              className="h-12"
-              inputMode="tel"
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
-              placeholder="98250 00000"
-            />
-          </div>
+        <div className="mt-5">
+          <CustomerFields
+            value={customer}
+            onChange={setCustomer}
+            showErrors={showErrors}
+            autoFocus
+          />
         </div>
 
         <Button
           className="mt-6 h-14 w-full text-base"
-          disabled={blocked || name.trim().length < 2 || mobile.trim().length < 6}
+          disabled={blocked}
           onClick={() => {
-            const order = startTakeaway({ customerName: name.trim(), mobile: mobile.trim() });
+            const errors = customerErrors(customer);
+            if (errors.mobile || errors.gstin) {
+              setShowErrors(true);
+              return;
+            }
+            const order = startTakeaway({
+              customerName: customer.name.trim(),
+              mobile: customer.mobile,
+              address: customer.address.trim(),
+              gstin: customer.gstin,
+            });
             navigate({ to: "/order/$orderId", params: { orderId: order.id } });
           }}
         >

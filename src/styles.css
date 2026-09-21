@@ -112,14 +112,18 @@
   --nonveg: oklch(0.55 0.2 30);
   --st-free: oklch(0.5 0.12 155);
   --st-free-soft: oklch(0.95 0.04 155);
-  --st-running: oklch(0.52 0.15 250);
-  --st-running-soft: oklch(0.95 0.03 250);
-  --st-held: oklch(0.58 0.13 70);
-  --st-held-soft: oklch(0.96 0.05 80);
-  --st-billed: oklch(0.5 0.15 300);
-  --st-billed-soft: oklch(0.95 0.035 300);
-  --st-reserved: oklch(0.5 0.1 200);
-  --st-reserved-soft: oklch(0.95 0.03 200);
+  /* Same as the Web POS table grid (billerpe-pos-pro-v2 styles.css
+     --status-*): hold grey, running / KOT sent red, bill generated yellow,
+     reserved blue. The strong value is the Web POS text colour, the soft
+     one its tile background. Free stays green - KOT "Ready" uses it too. */
+  --st-running: #941820;
+  --st-running-soft: #faeced;
+  --st-held: oklch(0.42 0.012 261.8);
+  --st-held-soft: oklch(0.931 0.003 264.5);
+  --st-billed: oklch(0.481 0.108 87.2);
+  --st-billed-soft: oklch(0.954 0.054 94.7);
+  --st-reserved: oklch(0.443 0.08 250.6);
+  --st-reserved-soft: oklch(0.923 0.022 250.2);
   --st-cancelled: oklch(0.55 0.02 60);
   --st-cancelled-soft: oklch(0.94 0.005 60);
   --conn-online: oklch(0.55 0.14 155);

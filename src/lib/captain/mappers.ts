@@ -265,6 +265,8 @@ export function mapServerOrder(raw: RawOrder, station: StationResolver): Order {
     tableLabel: raw.hms_table_mst?.table_name ?? undefined,
     customerName: raw.hms_user_master?.name || undefined,
     mobile: raw.hms_user_master?.number || undefined,
+    address: raw.hms_user_master?.address || undefined,
+    gstin: raw.hms_user_master?.gstin || undefined,
     guests: 0,
     openedAt: raw.createdAt,
     status: mapOrderStatus(raw),

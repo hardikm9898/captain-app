@@ -75,6 +75,8 @@ export type OrderMeta = {
   guests?: number | undefined;
   customerName?: string | undefined;
   mobile?: string | undefined;
+  address?: string | undefined;
+  gstin?: string | undefined;
   openedAt?: string | undefined;
 };
 export const metaStore = {

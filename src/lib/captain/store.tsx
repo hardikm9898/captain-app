@@ -140,6 +140,13 @@ export type LoginInput =
   | { mode: "pin"; mobile: string; pin: string }
   | { mode: "password"; mobile: string; password: string };
 
+export type CustomerInput = {
+  customerName?: string | undefined;
+  mobile?: string | undefined;
+  address?: string | undefined;
+  gstin?: string | undefined;
+};
+
 type Ctx = Omit<State, "serverOrders" | "heldLines" | "settled" | "drafts" | "carts" | "meta"> & {
   orders: Order[];
   blocked: boolean;
@@ -152,7 +159,9 @@ type Ctx = Omit<State, "serverOrders" | "heldLines" | "settled" | "drafts" | "ca
   orderById: (id: string) => Order | undefined;
   tableById: (id: string) => RestaurantTable | undefined;
   startOrder: (input: { tableId: string; guests: number; customerName?: string }) => Order;
-  startTakeaway: (input: { customerName: string; mobile: string }) => Order;
+  startTakeaway: (input: CustomerInput) => Order;
+  /** Attach or change the order's customer; reaches the exe with the next KOT/bill. */
+  setCustomer: (orderId: string, input: CustomerInput) => void;
   addLine: (orderId: string, line: NewLineInput) => void;
   updateLineQty: (orderId: string, lineId: string, qty: number) => void;
   setLineNote: (orderId: string, lineId: string, note: string) => void;
@@ -265,9 +274,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     setBillSettings({
       gstOn: hotel.invoiceFormateIncGst !== false,
       serviceCharge: mapServiceCharge(hotel.hms_serviceCharge_mst),
-      packagingRule: mapChargeRule(
-        charges?.rules?.find((r) => r.rule_for === "packaging") ?? null,
-      ),
+      packagingRule: mapChargeRule(charges?.rules?.find((r) => r.rule_for === "packaging") ?? null),
       ...(taxes ? { taxRules: taxes.taxtTypes.map(mapTaxRule) } : {}),
     });
     const outlet: Outlet = {
@@ -540,7 +547,19 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
   );
 
   // ---------- connection state ----------
+  const checkingConnection = useRef(false);
   const checkConnection = useCallback(async () => {
+    if (checkingConnection.current) return;
+    checkingConnection.current = true;
+    try {
+      await checkConnectionNow();
+    } finally {
+      checkingConnection.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patch, pushNotification, refresh]);
+
+  const checkConnectionNow = async () => {
     let next: ConnectionState = "online";
     const syncPatch: Partial<SyncInfo> = { serverUrl: getBaseUrl() };
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
@@ -552,6 +571,17 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       // (cache -> mDNS -> default) only runs before login.
       let health = await pingCurrent(5000);
       if (!health && !getStoredToken()) health = await discoverServer(2500);
+      // One missed answer (Wi-Fi blip, the phone just woke up, the PC busy
+      // for a moment) is not an outage. Only an already-down state is
+      // re-declared on a single miss; otherwise ask twice more first, so
+      // orders are never paused while the server is actually fine.
+      if (!health && stateRef.current.connection !== "local-server-down") {
+        for (const wait of [1500, 3000]) {
+          await new Promise((r) => setTimeout(r, wait));
+          health = await pingCurrent(5000);
+          if (health) break;
+        }
+      }
       if (!health) next = "local-server-down";
       else if (getStoredToken()) {
         // Deliberately NOT deriving "syncing"/"sync-error" from the exe's
@@ -601,7 +631,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       }
     }
     patch((s) => ({ ...s, connection: next, sync: { ...s.sync, ...syncPatch } }));
-  }, [patch, pushNotification, refresh]);
+  };
 
   useEffect(() => {
     void checkConnection();
@@ -637,7 +667,10 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
         if (
           entities.some(
             (e) =>
-              e.startsWith("menu") || e === "variants" || e === "addons" || e === "addonDepartments",
+              e.startsWith("menu") ||
+              e === "variants" ||
+              e === "addons" ||
+              e === "addonDepartments",
           )
         ) {
           void loadMenu().catch(() => {});
@@ -682,8 +715,12 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       return {
         ...o,
         guests: meta.guests ?? o.guests,
-        customerName: o.customerName ?? meta.customerName,
-        mobile: o.mobile ?? meta.mobile,
+        // Details the captain just entered win over the server's copy until
+        // the next KOT/bill carries them there.
+        customerName: meta.customerName ?? o.customerName,
+        mobile: meta.mobile ?? o.mobile,
+        address: meta.address ?? o.address,
+        gstin: meta.gstin ?? o.gstin,
         status: billFlag && o.status === "running" ? ("billed" as const) : o.status,
         billRequestedAt: o.billRequestedAt ?? billFlag,
         rounds,
@@ -790,6 +827,8 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
         : {}),
       ...(order.customerName ? { userName: order.customerName } : {}),
       ...(order.mobile ? { mobile: order.mobile } : {}),
+      ...(order.gstin ? { gstin: order.gstin } : {}),
+      ...(order.address ? { address: order.address } : {}),
       // Every figure here is a PREVIEW: the exe recomputes and stores the
       // authoritative totals from the persisted lines with the one shared
       // bill engine (helpers/orderTotals.js). Discount fields are
@@ -827,6 +866,8 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
               guests: draft.guests,
               customerName: draft.customerName,
               mobile: draft.mobile,
+              address: draft.address,
+              gstin: draft.gstin,
               openedAt: draft.openedAt,
             }
           : {}),
@@ -893,7 +934,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       return order;
     },
 
-    startTakeaway: ({ customerName, mobile }) => {
+    startTakeaway: ({ customerName, mobile, address, gstin }) => {
       const id = nextId("draft-ta-");
       const order: Order = {
         id,
@@ -901,6 +942,8 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
         tableIds: [],
         customerName,
         mobile,
+        address,
+        gstin,
         guests: 1,
         openedAt: new Date().toISOString(),
         status: "running",
@@ -909,6 +952,20 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       };
       patch((s) => ({ ...s, drafts: { ...s.drafts, [id]: order } }));
       return order;
+    },
+
+    setCustomer: (orderId, { customerName, mobile, address, gstin }) => {
+      const details = {
+        customerName: customerName || undefined,
+        mobile: mobile || undefined,
+        address: address || undefined,
+        gstin: gstin || undefined,
+      };
+      patch((s) =>
+        s.drafts[orderId]
+          ? { ...s, drafts: { ...s.drafts, [orderId]: { ...s.drafts[orderId], ...details } } }
+          : { ...s, meta: { ...s.meta, [orderId]: { ...(s.meta[orderId] ?? {}), ...details } } },
+      );
     },
 
     addLine: (orderId, input) => {

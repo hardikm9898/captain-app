@@ -101,6 +101,8 @@ export type Order = {
   tableIds: string[];
   customerName?: string | undefined;
   mobile?: string | undefined;
+  address?: string | undefined;
+  gstin?: string | undefined;
   guests: number;
   openedAt: string;
   status: OrderStatus;

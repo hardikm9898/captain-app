@@ -61,6 +61,17 @@ export type RawHotel = {
   hms_serviceCharge_mst?: RawServiceCharge | null;
 };
 
+// ---------- customers ----------
+export type RawCustomer = { id: number; number: string; name: string; address: string; gstin: string };
+
+export const customerApi = {
+  // Saved customers whose mobile contains `digits` (controller/customer.js).
+  searchByMobile: (digits: string) =>
+    http.get<{ numbers: RawCustomer[]; total: number }>(
+      `/customer/getAll?limit=8&search=${encodeURIComponent(digits)}`,
+    ),
+};
+
 export const hotelApi = {
   getSingle: () => http.get<RawHotel>("/singleHotel"),
   getUsers: () => http.get<{ hotelUsers: RawHotelUser[] }>("/offlineHotelUser"),
@@ -220,7 +231,7 @@ export type RawOrder = {
   hotelUserId: number | null;
   TableId: number | null;
   hms_table_mst?: { id: number; table_name: string } | null;
-  hms_user_master?: { name?: string; number?: string } | null;
+  hms_user_master?: { name?: string; number?: string; address?: string; gstin?: string } | null;
   hms_orderDetails: RawOrderLine[];
 };
 
@@ -268,6 +279,8 @@ export type OrderPayload = {
   tableNumber?: string;
   userName?: string;
   mobile?: string;
+  gstin?: string;
+  address?: string;
   cart: CartPayload;
 };
 
