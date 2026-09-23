@@ -1233,6 +1233,13 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
         toast.error("Bill already generated — merge is no longer possible");
         return false;
       }
+      // A held order is never merged, either way - it can only be
+      // transferred to a free table (owner rule, 2026-09-22; the exe refuses
+      // it too - billerpe-local-exe/controller/table.js#destinationProblem).
+      if (current.status === "held" || other.status === "held") {
+        toast.error("Held orders can't be merged — transfer to a free table instead");
+        return false;
+      }
       const myTable = current.tableIds[0];
       if (!myTable) return false;
       if (other.backendId === undefined) {

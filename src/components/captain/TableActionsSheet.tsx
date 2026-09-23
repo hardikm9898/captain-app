@@ -20,8 +20,11 @@ export function TableActionsSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { tables, orderForTable, mergeTables, transferTable, setGuests, cancelOrder } =
+  const { tables, areas, orderForTable, mergeTables, transferTable, setGuests, cancelOrder } =
     useCaptain();
+  // The section a table sits in, shown in the merge/transfer lists so the
+  // right table is picked (owner report, 2026-09-22).
+  const areaName = (areaId: string) => areas.find((a) => a.id === areaId)?.name ?? "";
   const navigate = useNavigate();
   const [panel, setPanel] = useState<Panel>("menu");
   const [guests, setLocalGuests] = useState(order.guests);
@@ -32,7 +35,16 @@ export function TableActionsSheet({
     setTimeout(() => setPanel("menu"), 200);
   };
 
-  const occupied = tables.filter((t) => !order.tableIds.includes(t.id) && orderForTable(t.id));
+  // Held and billed orders are never merged (the exe refuses both).
+  const occupied = tables.filter((t) => {
+    const other = orderForTable(t.id);
+    return (
+      !order.tableIds.includes(t.id) &&
+      !!other &&
+      other.status !== "held" &&
+      other.status !== "billed"
+    );
+  });
   const free = tables.filter((t) => !orderForTable(t.id) && t.status !== "reserved");
 
   return (
@@ -88,7 +100,12 @@ export function TableActionsSheet({
                 The selected table's rounds and un-fired lines move into this order; that table is
                 freed.
               </p>
-              {occupied.length === 0 ? (
+              {order.status === "held" ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  This order is on hold. Held orders can't be merged — use Transfer Table to move it
+                  to a free table.
+                </p>
+              ) : occupied.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   No other occupied table to merge.
                 </p>
@@ -109,7 +126,14 @@ export function TableActionsSheet({
                     }}
                     className="flex w-full items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 text-left disabled:opacity-60"
                   >
-                    <span className="font-semibold">Table {t.name}</span>
+                    <span className="font-semibold">
+                      Table {t.name}
+                      {/* its section, so the right table is picked (owner
+                          report, 2026-09-22) */}
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        {areaName(t.areaId)}
+                      </span>
+                    </span>
                     <span className="text-xs text-muted-foreground">
                       {orderForTable(t.id)?.guests || "—"} guests
                     </span>
@@ -140,9 +164,12 @@ export function TableActionsSheet({
                         navigate({ to: "/" });
                       } else toast.error("That table is occupied");
                     }}
-                    className="rounded-2xl border border-border bg-card py-4 text-center font-semibold disabled:opacity-60"
+                    className="rounded-2xl border border-border bg-card py-3 text-center font-semibold disabled:opacity-60"
                   >
-                    {t.name}
+                    <span className="block">{t.name}</span>
+                    <span className="block text-[10px] font-normal text-muted-foreground">
+                      {areaName(t.areaId)}
+                    </span>
                   </button>
                 ))}
               </div>
