@@ -170,7 +170,7 @@ export function VariantSheet({
               </section>
             </div>
             <div className="flex items-center gap-3 border-t border-border p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-              <QtyStepper value={qty} onChange={setQty} min={1} size="lg" />
+              <QtyStepper value={qty} onChange={setQty} min={1} size="lg" editable />
               <Button
                 className="h-12 flex-1 text-base"
                 disabled={!valid}

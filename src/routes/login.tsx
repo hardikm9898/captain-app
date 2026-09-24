@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConnectionStrip } from "@/components/captain/ConnectionStrip";
 import { describeError } from "@/lib/exe/client";
-import { getBaseUrl, setManualServerAddress } from "@/lib/exe/discovery";
+import { adoptServer, getBaseUrl, setManualServerAddress } from "@/lib/exe/discovery";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -175,6 +175,9 @@ function LoginScreen() {
                   const ok = await setManualServerAddress(serverAddress);
                   setBusy(false);
                   if (ok) {
+                    // Signed out here, so this PC simply becomes the one
+                    // this handset searches for if its address changes.
+                    adoptServer(ok);
                     toast.success("Connected to the local server");
                     setServerOpen(false);
                     void recheckConnection();

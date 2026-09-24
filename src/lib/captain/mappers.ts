@@ -6,6 +6,7 @@ import type {
   RawAddonGroup,
   RawHotelUser,
   RawKitchen,
+  RawMenuCatalog,
   RawMenuCategory,
   RawMenuItem,
   RawOrder,
@@ -20,6 +21,7 @@ import type {
   KotRound,
   KotStatus,
   LineAddon,
+  MenuCatalog,
   MenuCategory,
   MenuItem,
   Order,
@@ -54,7 +56,33 @@ export function mapTable(t: RawTable): RestaurantTable {
 }
 
 export function mapCategory(c: RawMenuCategory): MenuCategory {
-  return { id: String(c.id), name: c.menu_categ_nm };
+  return {
+    id: String(c.id),
+    name: c.menu_categ_nm,
+    menuId: c.menu_catalog_id != null ? String(c.menu_catalog_id) : undefined,
+  };
+}
+
+function jsonIdList(v: unknown): string[] {
+  let x = v;
+  for (let i = 0; i < 3 && typeof x === "string"; i++) {
+    try {
+      x = JSON.parse(x || "[]");
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(x) ? x.map(String) : [];
+}
+
+export function mapMenuCatalog(m: RawMenuCatalog): MenuCatalog {
+  return {
+    id: String(m.id),
+    name: m.name,
+    isDefault: Boolean(m.is_default),
+    tableCategoryIds: jsonIdList(m.table_category_ids),
+    orderTypes: jsonIdList(m.order_types),
+  };
 }
 
 export function mapAddonGroup(g: RawAddonGroup): AddonGroup {
@@ -190,6 +218,8 @@ export function mapServerLine(
     categoryId: categoryId != null ? String(categoryId) : undefined,
     backendLineId: l.id,
     firedById: l.firedBy ?? undefined,
+    routePrinterId: l.route_printer_id ?? undefined,
+    routeKitchenId: l.route_kitchen_id ?? undefined,
   };
 }
 

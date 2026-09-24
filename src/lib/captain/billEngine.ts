@@ -125,9 +125,15 @@ export function asArray(v: unknown): string[] {
 // Settings screen says and the old BillerPe did. It used orderTypeAllowed's
 // "empty = all", so switching automatic off changed nothing (owner report,
 // 2026-09-22). Same rule as billerpe-local-exe/helpers/billEngine.js.
-export function serviceIsAutomatic(rule: EngineChargeRule | null | undefined, orderType: string): boolean {
+export function serviceIsAutomatic(
+  rule: EngineChargeRule | null | undefined,
+  orderType: string,
+): boolean {
   if (!rule || !rule.active) return false;
-  return asArray(rule.orderTypes).map(normaliseOrderType).filter(Boolean).includes(normaliseOrderType(orderType));
+  return asArray(rule.orderTypes)
+    .map(normaliseOrderType)
+    .filter(Boolean)
+    .includes(normaliseOrderType(orderType));
 }
 
 function orderTypeAllowed(list: unknown, orderType: string): boolean {
@@ -259,6 +265,8 @@ export function computeBill(input: EngineInput): EngineTotals {
     rawGrand,
     grandAmount,
     roundOff,
-    items: lines.reduce((s, l) => s + (Number(l.qty) || 0), 0),
+    // Fractional quantities: 0.1 + 0.2 must count as 0.3 (kept inline - this
+    // engine stays self-contained).
+    items: Math.round(lines.reduce((s, l) => s + (Number(l.qty) || 0), 0) * 100) / 100,
   };
 }

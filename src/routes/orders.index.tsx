@@ -114,7 +114,11 @@ function OrdersScreen() {
                             : "text-st-running",
                     )}
                   >
-                    {o.status === "billed" ? "Bill requested" : o.status}
+                    {o.id.startsWith("draft-")
+                      ? "Not sent"
+                      : o.status === "billed"
+                        ? "Bill requested"
+                        : o.status}
                   </p>
                 </div>
               </Link>

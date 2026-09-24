@@ -170,7 +170,10 @@ function TableGrid() {
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {shown.map((t) => {
-            const order = orderForTable(t.id);
+            // Only an order the exe has (KOT / save / hold) shows on the card; a
+            // draft still in this phone's cart leaves the table looking free.
+            const found = orderForTable(t.id);
+            const order = found && !found.id.startsWith("draft-") ? found : undefined;
             const meta = tableStatusMeta[t.status];
             const totals = order ? orderTotals(order) : null;
             return (

@@ -1,3 +1,4 @@
+import { roundQty } from "@/lib/captain/qty";
 import { useState } from "react";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ export function CartSheet({
   const [removing, setRemoving] = useState(false);
   const totals = orderTotals(order);
   const round = currentRoundOf(order);
-  const roundItems = round?.lines.reduce((s, l) => s + l.qty, 0) ?? 0;
+  const roundItems = roundQty(round?.lines.reduce((s, l) => s + l.qty, 0) ?? 0);
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -122,6 +123,7 @@ export function CartSheet({
                           ) : (
                             <QtyStepper
                               size="sm"
+                              editable
                               value={l.qty}
                               onChange={(q) => updateLineQty(order.id, l.id, q)}
                             />

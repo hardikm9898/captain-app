@@ -62,7 +62,13 @@ export type RawHotel = {
 };
 
 // ---------- customers ----------
-export type RawCustomer = { id: number; number: string; name: string; address: string; gstin: string };
+export type RawCustomer = {
+  id: number;
+  number: string;
+  name: string;
+  address: string;
+  gstin: string;
+};
 
 export const customerApi = {
   // Saved customers whose mobile contains `digits` (controller/customer.js).
@@ -141,7 +147,23 @@ export const tableApi = {
 };
 
 // ---------- menu ----------
-export type RawMenuCategory = { id: number; menu_categ_nm: string; active: boolean; rank?: number };
+export type RawMenuCategory = {
+  id: number;
+  menu_categ_nm: string;
+  active: boolean;
+  rank?: number;
+  /** Which menu (hms_menu_catalog_mst) this category belongs to. */
+  menu_catalog_id?: number | null;
+};
+/** A menu of the outlet (e.g. "Main Menu", "Happy Hours") - set up in the Web POS. */
+export type RawMenuCatalog = {
+  id: number;
+  name: string;
+  is_default: boolean;
+  active?: boolean;
+  table_category_ids: unknown;
+  order_types: unknown;
+};
 export type RawMenuItemVariant = {
   id: number;
   variants_name: string;
@@ -177,7 +199,12 @@ export type RawKitchen = {
   table_ids: unknown;
 };
 
+export type RawPrinterSetting = { id: number; printer_name: string; print_type: string };
+
 export const menuApi = {
+  getMenuCatalogs: () => http.get<{ menuCatalogs: RawMenuCatalog[] }>("/menuCatalog"),
+  // Which KOT printers exist - a custom item asks for one when there are several.
+  getPrinters: () => http.get<{ printerSettings: RawPrinterSetting[] }>("/offlinePrinterSetting"),
   getCategories: () => http.get<{ catagories: RawMenuCategory[] }>("/catagories/%25"),
   getItemsWithVariants: () => http.get<{ menu: RawMenuItem[] }>("/menuShowWithVariants"),
   getAddonGroups: () => http.get<{ addons: RawAddonGroup[] }>("/addon"),
@@ -187,6 +214,8 @@ export const menuApi = {
 // ---------- orders ----------
 export type RawOrderLine = {
   id: number;
+  route_printer_id?: number | null;
+  route_kitchen_id?: number | null;
   qty: number;
   price: number;
   variant_id: number | null;
@@ -237,7 +266,14 @@ export type RawOrder = {
 
 export type KotCartAddon = { id: number; addon_name: string; price: number; qty: number };
 export type KotCartItem = {
-  id: number;
+  /** Menu id - absent on a custom item, which goes as custom + item_name and
+   * is filed by the exe under a hidden menu row carrying that name. */
+  id?: number;
+  custom?: boolean;
+  item_name?: string;
+  /** A custom item's chosen KOT printer / KDS kitchen (exe ids). */
+  route_printer_id?: number;
+  route_kitchen_id?: number;
   qty: number;
   price: number;
   discount: number;

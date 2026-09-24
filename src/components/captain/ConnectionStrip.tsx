@@ -9,7 +9,10 @@ import {
   Wifi,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { useCaptain } from "@/lib/captain/store";
+import { adoptServer, isDifferentServer, setManualServerAddress } from "@/lib/exe/discovery";
+import { Input } from "@/components/ui/input";
 import type { ConnectionState } from "@/lib/captain/types";
 import { cn } from "@/lib/utils";
 import {
@@ -105,9 +108,42 @@ export function ConnectionStrip() {
 }
 
 export function BlockingConnectionModal() {
-  const { connection, recheckConnection, blocked, sync } = useCaptain();
+  const { connection, recheckConnection, blocked, sync, logout } = useCaptain();
   const [checking, setChecking] = useState(false);
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [address, setAddress] = useState("");
+  const [addressError, setAddressError] = useState("");
   const m = meta[connection];
+
+  // The outlet PC's address changed and the automatic search did not find
+  // it (another subnet, or the Wi-Fi blocks it): the new address can be
+  // typed right here - it used to need a logout first.
+  const connectTo = async () => {
+    if (!address.trim()) {
+      setAddressError("Enter the server address");
+      return;
+    }
+    setChecking(true);
+    const info = await setManualServerAddress(address);
+    if (!info) {
+      setChecking(false);
+      setAddressError("Could not reach that address");
+      return;
+    }
+    if (isDifferentServer(info)) {
+      // A different PC did not issue this handset's session.
+      adoptServer(info);
+      logout();
+      toast.info("Connected to a different BillerPe PC - sign in again");
+    } else {
+      adoptServer(info);
+      toast.success("Connected to the local server");
+    }
+    setChangeOpen(false);
+    setAddress("");
+    await recheckConnection();
+    setChecking(false);
+  };
 
   return (
     <AnimatePresence>
@@ -137,12 +173,73 @@ export function BlockingConnectionModal() {
                   }}
                 >
                   <RefreshCw className={cn("mr-2 h-4 w-4", checking && "animate-spin")} />{" "}
-                  {checking ? "Checking…" : "Retry connection"}
+                  {checking
+                    ? connection === "local-server-down"
+                      ? "Searching the network…"
+                      : "Checking…"
+                    : connection === "local-server-down"
+                      ? "Retry & search network"
+                      : "Retry connection"}
                 </Button>
                 {connection === "local-server-down" ? (
-                  <p className="text-center text-[11px] text-muted-foreground">
-                    Wrong address? Log out and use “Change server address” on the login screen.
-                  </p>
+                  changeOpen ? (
+                    <div className="space-y-2 rounded-2xl border border-dashed border-border p-3">
+                      <p className="text-[11px] text-muted-foreground">
+                        New address of the BillerPe PC - shown on its dashboard under “Network”,
+                        e.g. 192.168.1.12:4100.
+                      </p>
+                      <Input
+                        className="h-11"
+                        value={address}
+                        inputMode="url"
+                        placeholder="192.168.1.12:4100"
+                        aria-label="Server address"
+                        aria-invalid={!!addressError || undefined}
+                        onChange={(e) => {
+                          setAddress(e.target.value);
+                          setAddressError("");
+                        }}
+                      />
+                      {addressError ? (
+                        <p className="text-xs text-destructive">{addressError}</p>
+                      ) : null}
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="h-11 flex-1"
+                          disabled={checking}
+                          onClick={() => {
+                            setChangeOpen(false);
+                            setAddressError("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          className="h-11 flex-1"
+                          disabled={checking}
+                          onClick={() => void connectTo()}
+                        >
+                          Connect
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="h-12 w-full"
+                        disabled={checking}
+                        onClick={() => setChangeOpen(true)}
+                      >
+                        Change server address
+                      </Button>
+                      <p className="text-center text-[11px] text-muted-foreground">
+                        If the PC got a new address, this handset looks for it on the Wi-Fi by
+                        itself.
+                      </p>
+                    </>
+                  )
                 ) : null}
               </div>
             </motion.div>

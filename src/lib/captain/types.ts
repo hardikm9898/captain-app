@@ -39,7 +39,19 @@ export type AddonGroup = {
 };
 export type Variant = { id: string; name: string; price: number };
 
-export type MenuCategory = { id: string; name: string };
+export type MenuCategory = { id: string; name: string; menuId?: string | undefined };
+
+/** One of the outlet's menus. Which one an order starts on follows the same
+ * rule as the Web POS (billerpe-pos-pro-v2 store.tsx#resolveMenu). */
+export type MenuCatalog = {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  /** empty = not scoped by table area */
+  tableCategoryIds: string[];
+  /** "Dine-in" / "Pickup"; empty = not scoped by order type */
+  orderTypes: string[];
+};
 
 export type MenuItem = {
   id: string;
@@ -83,7 +95,15 @@ export type OrderLine = {
   backendLineId?: number | undefined;
   /** Which captain (HotelUser id) fired this line - deletion is restricted to them or a Manager/Owner. */
   firedById?: number | undefined;
+  /** Added by the captain, not on the menu ("Custom item"). */
+  custom?: boolean | undefined;
+  /** A custom item's chosen KOT printer / KDS kitchen - only asked when the outlet has more than one. */
+  routePrinterId?: number | undefined;
+  routeKitchenId?: number | undefined;
 };
+
+/** Where a custom item can be sent (exe KOT printers / KDS kitchens). */
+export type Station = { id: number; name: string };
 
 export type KotRound = {
   no: number;

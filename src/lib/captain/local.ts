@@ -78,6 +78,8 @@ export type OrderMeta = {
   address?: string | undefined;
   gstin?: string | undefined;
   openedAt?: string | undefined;
+  /** The menu the captain switched this order to (device-local, like the Web POS). */
+  menuId?: string | undefined;
 };
 export const metaStore = {
   get: () => read<Record<string, OrderMeta>>(K.guests, {}),

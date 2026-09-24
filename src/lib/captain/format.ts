@@ -1,4 +1,6 @@
-export const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+// Paise shown when there are any: with fractional quantities (2.55 x ₹99)
+// a whole-rupee figure disagreed with the bill (₹252 vs ₹252.45).
+export const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 export const elapsed = (iso: string) => {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));

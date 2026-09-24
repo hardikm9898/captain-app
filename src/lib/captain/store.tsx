@@ -35,8 +35,15 @@ import {
   setStoredToken,
   setUnauthorizedHandler,
 } from "@/lib/exe/client";
-import { discoverServer, getBaseUrl, pingCurrent } from "@/lib/exe/discovery";
+import {
+  discoverServer,
+  findMovedServer,
+  getBaseUrl,
+  pingCurrent,
+  rememberServerDevice,
+} from "@/lib/exe/discovery";
 import { connectChangeFeed } from "@/lib/exe/socket";
+import { roundQty } from "@/lib/captain/qty";
 import {
   buildStationResolver,
   isToday,
@@ -44,6 +51,7 @@ import {
   mapArea,
   mapCaptain,
   mapCategory,
+  mapMenuCatalog,
   mapHeldLines,
   mapMenuItem,
   mapReservation,
@@ -86,11 +94,21 @@ import type {
   OrderLine,
   Outlet,
   Reservation,
+  MenuCatalog,
   RestaurantTable,
+  Station,
   TableArea,
 } from "./types";
 
 export { orderTotals, lineTotal, currentRoundOf } from "./totals";
+
+export type CustomLineInput = {
+  name: string;
+  price: number;
+  qty: number;
+  routePrinterId?: number | undefined;
+  routeKitchenId?: number | undefined;
+};
 
 export type NewLineInput = {
   itemId: string;
@@ -126,6 +144,11 @@ type State = {
   heldLines: Record<string, OrderLine[]>;
   settled: Order[];
   drafts: Record<string, Order>;
+  /** KOT printers and KDS kitchens a custom item can be sent to. */
+  kotPrinters: Station[];
+  kitchens: Station[];
+  /** The outlet's menus; more than one lets the captain switch an order's menu. */
+  menus: MenuCatalog[];
   carts: Record<string, OrderLine[]>;
   meta: Record<string, OrderMeta>;
   billRequested: Record<string, string>;
@@ -159,10 +182,17 @@ type Ctx = Omit<State, "serverOrders" | "heldLines" | "settled" | "drafts" | "ca
   orderById: (id: string) => Order | undefined;
   tableById: (id: string) => RestaurantTable | undefined;
   startOrder: (input: { tableId: string; guests: number; customerName?: string }) => Order;
+  /** Leaving an opened table with nothing added: forget the draft. */
+  discardEmptyDraft: (orderId: string) => void;
   startTakeaway: (input: CustomerInput) => Order;
   /** Attach or change the order's customer; reaches the exe with the next KOT/bill. */
   setCustomer: (orderId: string, input: CustomerInput) => void;
   addLine: (orderId: string, line: NewLineInput) => void;
+  /** A one-off item not on the menu - sent by name, taxed like the rest of the order. */
+  addCustomLine: (orderId: string, input: CustomLineInput) => void;
+  /** The menu this order is taking items from (null when the outlet has one menu). */
+  menuForOrder: (order: Order) => MenuCatalog | null;
+  setOrderMenu: (orderId: string, menuId: string) => void;
   updateLineQty: (orderId: string, lineId: string, qty: number) => void;
   setLineNote: (orderId: string, lineId: string, note: string) => void;
   fireKot: (orderId: string) => Promise<KotResult | null>;
@@ -195,6 +225,12 @@ const nextId = (prefix: string) => `${prefix}${++uid}`;
 
 const ACTIVE: Order["status"][] = ["running", "held", "billed"];
 
+// A draft is the order a captain opened on this phone but never sent. One
+// with nothing in its cart is just a table that was looked at.
+function withoutEmptyDrafts(drafts: Record<string, Order>, carts: Record<string, OrderLine[]>) {
+  return Object.fromEntries(Object.entries(drafts).filter(([id]) => (carts[id] ?? []).length > 0));
+}
+
 const lineSignature = (l: {
   itemId: string;
   variantName?: string | undefined;
@@ -221,7 +257,10 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     serverOrders: [],
     heldLines: {},
     settled: [],
-    drafts: draftStore.get(),
+    drafts: withoutEmptyDrafts(draftStore.get(), cartStore.get()),
+    kotPrinters: [],
+    kitchens: [],
+    menus: [],
     carts: cartStore.get(),
     meta: metaStore.get(),
     billRequested: flagStore.get().billRequested,
@@ -295,11 +334,13 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
   }, [patch]);
 
   const loadMenu = useCallback(async () => {
-    const [cats, items, addons, kitchens] = await Promise.all([
+    const [cats, items, addons, kitchens, printers, catalogs] = await Promise.all([
       menuApi.getCategories(),
       menuApi.getItemsWithVariants(),
       menuApi.getAddonGroups().catch(() => ({ addons: [] })),
       menuApi.getKitchens().catch(() => ({ kitchen: [] })),
+      menuApi.getPrinters().catch(() => ({ printerSettings: [] })),
+      menuApi.getMenuCatalogs().catch(() => ({ menuCatalogs: [] })),
     ]);
     const station = buildStationResolver(kitchens.kitchen ?? []);
     stationRef.current = station;
@@ -315,7 +356,14 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       .filter((c) => c.active !== false && usedCategories.has(String(c.id)))
       .sort((a, b) => (a.rank ?? a.id) - (b.rank ?? b.id))
       .map(mapCategory);
-    patch((s) => ({ ...s, menu, categories }));
+    const kotPrinters = (printers.printerSettings ?? [])
+      .filter((p) => p.print_type === "K")
+      .map((p) => ({ id: p.id, name: p.printer_name }));
+    const kitchenList = (kitchens.kitchen ?? []).map((k) => ({ id: k.id, name: k.kitchen_name }));
+    const menus = (catalogs.menuCatalogs ?? [])
+      .filter((m) => m.active !== false)
+      .map(mapMenuCatalog);
+    patch((s) => ({ ...s, menu, categories, kotPrinters, kitchens: kitchenList, menus }));
   }, [patch]);
 
   const prevServerRef = useRef<
@@ -369,7 +417,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
           o.rounds
             .filter((r) => r.status === "ready" && !readyBefore.has(r.no))
             .forEach((r) => {
-              const roundItems = r.lines.reduce((sum, l) => sum + l.qty, 0);
+              const roundItems = roundQty(r.lines.reduce((sum, l) => sum + l.qty, 0));
               const itemList = r.lines.map((l) => `${l.qty}× ${l.name}`).join(", ");
               pushNotification({
                 id: `ready-${o.backendId}-${r.no}`,
@@ -547,30 +595,49 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
   );
 
   // ---------- connection state ----------
-  const checkingConnection = useRef(false);
-  const checkConnection = useCallback(async () => {
-    if (checkingConnection.current) return;
-    checkingConnection.current = true;
-    try {
-      await checkConnectionNow();
-    } finally {
-      checkingConnection.current = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patch, pushNotification, refresh]);
+  // A tap on "Search again" waits for a check already running, then runs
+  // its own forced one - it is never silently ignored.
+  const runningCheck = useRef<Promise<void> | null>(null);
+  // Searching the network for a moved server pings up to 254 addresses, so
+  // the 15s background check does it at most once a minute; a tap forces it.
+  const lastServerSearch = useRef(0);
+  const checkConnection = useCallback(
+    async (force = false) => {
+      if (runningCheck.current) {
+        await runningCheck.current;
+        if (!force) return;
+      }
+      const run = checkConnectionNow(force);
+      runningCheck.current = run;
+      try {
+        await run;
+      } finally {
+        runningCheck.current = null;
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [patch, pushNotification, refresh],
+  );
 
-  const checkConnectionNow = async () => {
+  const checkConnectionNow = async (force = false) => {
+    let moved = false;
     let next: ConnectionState = "online";
     const syncPatch: Partial<SyncInfo> = { serverUrl: getBaseUrl() };
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       next = "offline";
     } else {
-      // Never hop servers while signed in: the session token is only valid on
-      // the exe that issued it, so a slow/failed ping on the current address
-      // must read as "server down", not trigger re-discovery. Discovery
-      // (cache -> mDNS -> default) only runs before login.
+      // A session token is only valid on the exe that issued it, so a
+      // signed-in handset never hops to a DIFFERENT server. It does follow
+      // its own exe PC to a new address (findMovedServer accepts only that
+      // PC's deviceId) - the outlet PC getting a new IP from the router used
+      // to leave captains stuck on "Local server unreachable" with no way
+      // out but logging out and typing the new IP.
+      const searchDue = force || Date.now() - lastServerSearch.current > 60_000;
       let health = await pingCurrent(5000);
-      if (!health && !getStoredToken()) health = await discoverServer(2500);
+      if (!health && !getStoredToken()) {
+        if (searchDue) lastServerSearch.current = Date.now();
+        health = await discoverServer(2500, { scan: searchDue });
+      }
       // One missed answer (Wi-Fi blip, the phone just woke up, the PC busy
       // for a moment) is not an outage. Only an already-down state is
       // re-declared on a single miss; otherwise ask twice more first, so
@@ -582,6 +649,16 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
           if (health) break;
         }
       }
+      if (!health && getStoredToken() && searchDue) {
+        lastServerSearch.current = Date.now();
+        const found = await findMovedServer();
+        if (found) {
+          health = found.info;
+          moved = true;
+          syncPatch.serverUrl = getBaseUrl();
+        }
+      }
+      if (health) rememberServerDevice(health);
       if (!health) next = "local-server-down";
       else if (getStoredToken()) {
         // Deliberately NOT deriving "syncing"/"sync-error" from the exe's
@@ -604,6 +681,13 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       }
     }
     const prev = stateRef.current.connection;
+    if (moved) {
+      pushNotification({
+        kind: "sync",
+        title: "Local server found",
+        body: `The outlet PC moved to ${getBaseUrl().replace(/^https?:\/\//, "")} - reconnected.`,
+      });
+    }
     if (prev !== next) {
       if (next === "local-server-down" || next === "offline" || next === "offline-limit-exceeded") {
         pushNotification({
@@ -648,6 +732,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
 
   // ---------- live updates: socket + polling ----------
   const authed = Boolean(state.captain);
+  const serverUrl = state.sync.serverUrl;
   useEffect(() => {
     if (!authed) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -700,7 +785,9 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       clearInterval(resPoll);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [authed, loadFloor, loadMenu, loadReservations, loadSettings, logout]);
+    // serverUrl: the live feed reconnects to the exe's new address when the
+    // outlet PC moved (checkConnectionNow).
+  }, [authed, serverUrl, loadFloor, loadMenu, loadReservations, loadSettings, logout]);
 
   // ---------- derived orders ----------
   const orders = useMemo<Order[]>(() => {
@@ -745,11 +832,6 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
   ]);
 
   const tables = useMemo<RestaurantTable[]>(() => {
-    const draftTables = new Set(
-      Object.values(state.drafts)
-        .map((d) => d.tableIds[0])
-        .filter(Boolean),
-    );
     const reservedByTable = new Map<string, string>();
     state.reservations.forEach((r) => {
       const t = new Date(r.time);
@@ -772,11 +854,15 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
             : serverOrder.status === "billed"
               ? "billed"
               : "running";
-      else if (t.status !== "reserved" && draftTables.has(t.id)) status = "running";
+      // Owner rule (2026-09-24): a table is Running / Hold / Bill only when
+      // the exe has that order - after a KOT, a save or a hold. Opening a
+      // table (and even items still in this phone's cart) used to mark it
+      // Running on this handset, so a table merely looked at stayed
+      // "Running" with nothing ordered.
       const reservedToday = reservedByTable.get(t.id);
       return { ...t, status, ...(reservedToday ? { reservedToday } : {}) };
     });
-  }, [state.tables, state.serverOrders, state.drafts, state.reservations]);
+  }, [state.tables, state.serverOrders, state.reservations]);
 
   // ---------- payload helpers ----------
   const toKotItem = (l: OrderLine, kotNumber?: number): KotCartItem => {
@@ -796,8 +882,16 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
         qty: a.qty ?? 1,
       });
     });
+    // A custom item has no menu id: it goes by name, and the exe files it
+    // under a hidden menu row carrying that name (controller/kot.js), which
+    // is what every screen, the KDS, the bill and the cloud then show.
+    const menuId = Number(l.itemId);
+    const identity =
+      Number.isFinite(menuId) && menuId > 0 ? { id: menuId } : { custom: true, item_name: l.name };
     return {
-      id: Number(l.itemId),
+      ...identity,
+      ...(l.routePrinterId ? { route_printer_id: l.routePrinterId } : {}),
+      ...(l.routeKitchenId ? { route_kitchen_id: l.routeKitchenId } : {}),
       qty: l.qty,
       price: l.basePrice,
       discount: 0,
@@ -849,6 +943,20 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
   };
 
   const findOrder = (id: string) => orders.find((o) => o.id === id);
+
+  // Stable: the order screen calls it from an effect cleanup.
+  const discardEmptyDraft = useCallback(
+    (orderId: string) => {
+      patch((s) => {
+        if (!s.drafts[orderId] || (s.carts[orderId] ?? []).length > 0) return s;
+        const { [orderId]: _draft, ...drafts } = s.drafts;
+        const { [orderId]: _cart, ...carts } = s.carts;
+        const { [orderId]: _meta, ...meta } = s.meta;
+        return { ...s, drafts, carts, meta };
+      });
+    },
+    [patch],
+  );
   const ordersRef = useRef(orders);
   ordersRef.current = orders;
 
@@ -905,7 +1013,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     refresh,
-    recheckConnection: checkConnection,
+    recheckConnection: () => checkConnection(true),
     orderForTable: (tableId) =>
       orders.find((o) => o.tableIds.includes(tableId) && ACTIVE.includes(o.status)),
     orderById: (id) => findOrder(id),
@@ -933,6 +1041,8 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       patch((s) => ({ ...s, drafts: { ...s.drafts, [id]: order } }));
       return order;
     },
+
+    discardEmptyDraft,
 
     startTakeaway: ({ customerName, mobile, address, gstin }) => {
       const id = nextId("draft-ta-");
@@ -968,6 +1078,57 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       );
     },
 
+    menuForOrder: (order) => {
+      const menus = state.menus;
+      if (menus.length < 2) return null;
+      const chosen = state.meta[order.id]?.menuId;
+      const byChoice = chosen ? menus.find((m) => m.id === chosen) : undefined;
+      if (byChoice) return byChoice;
+      // Same default as the Web POS (store.tsx#resolveMenu): a menu set up
+      // for this table's area / order type, else the default menu.
+      const table = order.tableIds[0]
+        ? state.tables.find((t) => t.id === order.tableIds[0])
+        : undefined;
+      const type = order.type === "dine-in" ? "Dine-in" : "Pickup";
+      const direct = menus.find((m) => {
+        if (m.isDefault) return false;
+        if (!m.tableCategoryIds.length && !m.orderTypes.length) return false;
+        const tableOk =
+          !m.tableCategoryIds.length || (!!table && m.tableCategoryIds.includes(table.areaId));
+        const typeOk = !m.orderTypes.length || m.orderTypes.includes(type);
+        return tableOk && typeOk;
+      });
+      return direct ?? menus.find((m) => m.isDefault) ?? menus[0] ?? null;
+    },
+
+    setOrderMenu: (orderId, menuId) =>
+      patch((s) => ({
+        ...s,
+        meta: { ...s.meta, [orderId]: { ...(s.meta[orderId] ?? {}), menuId } },
+      })),
+
+    addCustomLine: (orderId, input) => {
+      const name = input.name.trim();
+      if (!name || !(input.price > 0) || !(input.qty > 0)) return;
+      const kitchen = stateRef.current.kitchens.find((k) => k.id === input.routeKitchenId);
+      setEditable(orderId, (lines) => [
+        ...lines,
+        {
+          id: nextId("d"),
+          itemId: nextId("custom-"),
+          name,
+          addons: [],
+          qty: roundQty(input.qty),
+          basePrice: input.price,
+          unitPrice: input.price,
+          station: kitchen?.name ?? stateRef.current.kitchens[0]?.name ?? "Kitchen",
+          custom: true,
+          routePrinterId: input.routePrinterId,
+          routeKitchenId: input.routeKitchenId,
+        },
+      ]);
+    },
+
     addLine: (orderId, input) => {
       const item = menuMapRef.current.get(input.itemId);
       if (!item) return;
@@ -991,7 +1152,9 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       setEditable(orderId, (lines) => {
         const match = lines.find((l) => lineSignature(l) === signature);
         if (match)
-          return lines.map((l) => (l.id === match.id ? { ...l, qty: l.qty + input.qty } : l));
+          return lines.map((l) =>
+            l.id === match.id ? { ...l, qty: roundQty(l.qty + input.qty) } : l,
+          );
         const line: OrderLine = {
           id: nextId("d"),
           itemId: input.itemId,
@@ -1011,11 +1174,12 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     },
 
     updateLineQty: (orderId, lineId, qty) =>
-      setEditable(orderId, (lines) =>
-        qty <= 0
+      setEditable(orderId, (lines) => {
+        const q = roundQty(qty);
+        return q <= 0
           ? lines.filter((l) => l.id !== lineId)
-          : lines.map((l) => (l.id === lineId ? { ...l, qty } : l)),
-      ),
+          : lines.map((l) => (l.id === lineId ? { ...l, qty: q } : l));
+      }),
 
     setLineNote: (orderId, lineId, note) =>
       setEditable(orderId, (lines) =>
@@ -1028,7 +1192,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       const lines = editableLines(orderId);
       if (!order || lines.length === 0) return null;
       const roundNo = order.rounds.filter((r) => r.firedAt).length + 1;
-      const items = lines.reduce((s, l) => s + l.qty, 0);
+      const items = roundQty(lines.reduce((s, l) => s + l.qty, 0));
       try {
         const res = await orderApi.kot(
           buildPayload(

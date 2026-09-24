@@ -1,5 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { CustomItemDialog } from "@/components/captain/CustomItemDialog";
+import { roundQty } from "@/lib/captain/qty";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowLeft,
@@ -44,6 +46,8 @@ export const Route = createFileRoute("/order/$orderId")({
   component: OrderMenu,
 });
 
+const pendingDiscard = new Map<string, ReturnType<typeof setTimeout>>();
+
 function OrderMenu() {
   const { orderId } = Route.useParams();
   const {
@@ -59,15 +63,37 @@ function OrderMenu() {
     setCustomer,
     blocked,
     booting,
+    discardEmptyDraft,
+    menus,
+    menuForOrder,
+    setOrderMenu,
   } = useCaptain();
   const navigate = useNavigate();
   const order = orderById(orderId);
+  // Back without adding anything: the table was only looked at, so the
+  // draft opened for it is dropped (and never shown as an order).
+  // Deferred and cancelled by a remount of the same order (React StrictMode
+  // re-runs effects once in development) so a draft is never dropped while
+  // its own screen is still open.
+  useEffect(() => {
+    clearTimeout(pendingDiscard.get(orderId));
+    return () => {
+      pendingDiscard.set(
+        orderId,
+        setTimeout(() => {
+          pendingDiscard.delete(orderId);
+          discardEmptyDraft(orderId);
+        }, 0),
+      );
+    };
+  }, [orderId, discardEmptyDraft]);
   // "" = All categories - the menu opens showing every item; tapping a
   // category chip narrows it, tapping it again (or "All") widens back out.
   const [categoryId, setCategoryId] = useState<string>("");
   const [query, setQuery] = useState("");
   const [vegOnly, setVegOnly] = useState(false);
   const [sheetItem, setSheetItem] = useState<MenuItem | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [guestEditorOpen, setGuestEditorOpen] = useState(false);
@@ -76,16 +102,27 @@ function OrderMenu() {
   const [busy, setBusy] = useState<"fire" | "hold" | null>(null);
   const [kotToast, setKotToast] = useState<KotResult | null>(null);
 
-  const items = useMemo(
+  // More than one menu (set up in the Web POS): the order shows only the
+  // menu it is on - the same default the Web POS picks, switchable per order.
+  const activeMenu = order ? menuForOrder(order) : null;
+  const defaultMenuId = menus.find((m) => m.isDefault)?.id ?? menus[0]?.id;
+  const menuCategories = useMemo(
     () =>
-      menu.filter((m) => {
-        if (vegOnly && !m.veg) return false;
-        if (query) return m.name.toLowerCase().includes(query.toLowerCase());
-        if (!categoryId) return true;
-        return m.categoryId === categoryId;
-      }),
-    [menu, categoryId, query, vegOnly],
+      activeMenu
+        ? categories.filter((c) => (c.menuId ?? defaultMenuId) === activeMenu.id)
+        : categories,
+    [categories, activeMenu, defaultMenuId],
   );
+  const items = useMemo(() => {
+    const inMenu = activeMenu ? new Set(menuCategories.map((c) => c.id)) : null;
+    return menu.filter((m) => {
+      if (inMenu && !inMenu.has(m.categoryId)) return false;
+      if (vegOnly && !m.veg) return false;
+      if (query) return m.name.toLowerCase().includes(query.toLowerCase());
+      if (!categoryId) return true;
+      return m.categoryId === categoryId;
+    });
+  }, [menu, menuCategories, activeMenu, categoryId, query, vegOnly]);
 
   if (!order) {
     return (
@@ -108,20 +145,20 @@ function OrderMenu() {
   const round = currentRoundOf(order);
   const totals = orderTotals(order);
   const roundLines = round?.lines ?? [];
-  const roundItems = roundLines.reduce((s, l) => s + l.qty, 0);
+  const roundItems = roundQty(roundLines.reduce((s, l) => s + l.qty, 0));
   const roundValue = roundLines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
   const readOnly =
     order.status === "billed" || order.status === "settled" || order.status === "cancelled";
 
   const qtyInRound = (itemId: string) =>
-    roundLines.filter((l) => l.itemId === itemId).reduce((s, l) => s + l.qty, 0);
+    roundQty(roundLines.filter((l) => l.itemId === itemId).reduce((s, l) => s + l.qty, 0));
 
   // Across every FIRED round (not the one being built right now) - so a
   // captain browsing the menu can see at a glance what this table has
   // already been sent, before adding more of it by mistake.
   const firedLines = order.rounds.filter((r) => r.firedAt).flatMap((r) => r.lines);
   const alreadySentQty = (itemId: string) =>
-    firedLines.filter((l) => l.itemId === itemId).reduce((s, l) => s + l.qty, 0);
+    roundQty(firedLines.filter((l) => l.itemId === itemId).reduce((s, l) => s + l.qty, 0));
   const firedSummary = (() => {
     const byName = new Map<string, number>();
     firedLines.forEach((l) => byName.set(l.name, (byName.get(l.name) ?? 0) + l.qty));
@@ -168,6 +205,7 @@ function OrderMenu() {
 
   const categoryRail = (
     <>
+      <Chip onClick={() => setCustomOpen(true)}>+ Custom item</Chip>
       <Chip active={vegOnly} onClick={() => setVegOnly(!vegOnly)}>
         Veg only
       </Chip>
@@ -181,7 +219,7 @@ function OrderMenu() {
       >
         All
       </Chip>
-      {categories.map((c) => (
+      {menuCategories.map((c) => (
         <Chip
           key={c.id}
           active={!query && categoryId === c.id}
@@ -306,6 +344,22 @@ function OrderMenu() {
         </button>
       ) : null}
 
+      {activeMenu ? (
+        <ChipRow className="mb-2">
+          {menus.map((m) => (
+            <Chip
+              key={m.id}
+              active={m.id === activeMenu.id}
+              onClick={() => {
+                setOrderMenu(order.id, m.id);
+                setCategoryId("");
+              }}
+            >
+              {m.name}
+            </Chip>
+          ))}
+        </ChipRow>
+      ) : null}
       <div className="relative">
         <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -405,18 +459,14 @@ function OrderMenu() {
                   {qty > 0 && !configurable ? (
                     <QtyStepper
                       size="sm"
+                      editable
                       value={qty}
                       onChange={(q) => {
                         const line = roundLines.find((l) => l.itemId === item.id);
                         if (!line) return;
-                        if (q > qty)
-                          addLine(order.id, {
-                            itemId: item.id,
-                            qty: 1,
-                            unitPrice: item.price,
-                            addons: [],
-                          });
-                        else updateLineQty(order.id, line.id, q);
+                        // +1 or a typed quantity alike: move this line by the
+                        // difference (it used to add exactly 1 whatever was typed).
+                        updateLineQty(order.id, line.id, roundQty(line.qty + (q - qty)));
                       }}
                     />
                   ) : (
@@ -503,6 +553,7 @@ function OrderMenu() {
         onHold={() => void onHold()}
         busy={busy}
       />
+      <CustomItemDialog orderId={order.id} open={customOpen} onOpenChange={setCustomOpen} />
       {order.type === "dine-in" ? (
         <TableActionsSheet order={order} open={actionsOpen} onOpenChange={setActionsOpen} />
       ) : null}
