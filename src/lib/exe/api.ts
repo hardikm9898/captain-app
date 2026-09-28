@@ -58,6 +58,8 @@ export type RawHotel = {
   contact1?: string | null;
   invoiceFormateIncGst: boolean;
   currency?: string;
+  /** "INR" default, or another code from lib/captain/currency.ts; "OTHER" = own symbol */
+  currency_code?: string;
   hms_serviceCharge_mst?: RawServiceCharge | null;
 };
 
@@ -351,11 +353,18 @@ export const orderApi = {
   remove: (id: number, free: boolean) =>
     http.post<{ message?: string }>("/orderRemove", { id, ...(free ? { free: "free" } : {}) }),
   // Deletes one line from an already-fired-but-not-yet-delivered KOT round.
-  // The exe itself enforces who's allowed (whoever fired that round, or a
-  // Manager/Owner) - a 403 here means this captain genuinely isn't allowed,
-  // not a bug to retry.
+  // The exe itself enforces who's allowed (the owner, or a user with "edit
+  // or remove an item after its KOT has been sent") - a 403 here means this
+  // user genuinely isn't allowed, not a bug to retry.
   removeLine: (orderId: number, lineId: number) =>
     http.post<{ message?: string }>("/kotItemRemove", { order_id: orderId, line_id: lineId }),
+  // Lowers one fired line's qty (3 -> 2). Same permission as removing it.
+  reduceLine: (orderId: number, lineId: number, qty: number) =>
+    http.post<{ message?: string }>("/kotItemQty", { order_id: orderId, line_id: lineId, qty }),
+  // What the signed-in user may do - decides which controls show; the exe
+  // still checks every action.
+  myPermissions: () =>
+    http.get<{ role: string; owner: boolean; special: Record<string, boolean> }>("/myPermissions"),
 };
 
 // ---------- reservations (exe relays to the cloud) ----------

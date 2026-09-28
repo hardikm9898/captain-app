@@ -157,6 +157,7 @@ export function mapMenuItem(
     favourite: Boolean(m.favorite),
     station: station(m.menu_categ_id),
     imageUrl: m.foodImage || undefined,
+    goods: m.gst_type === "G",
     ...(variants.length ? { variants } : {}),
     ...(addonGroups.length ? { addonGroups } : {}),
   };

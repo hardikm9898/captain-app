@@ -25,7 +25,7 @@ export type BillSettings = {
   /** Table -> area, so a tax rule scoped to table categories can resolve the order's table. */
   tables: Pick<RestaurantTable, "id" | "areaId">[];
   /** Area id -> the real table-category id on the exe (they are the same id). */
-  menuItems: Pick<MenuItem, "id" | "categoryId">[];
+  menuItems: Pick<MenuItem, "id" | "categoryId" | "goods">[];
 };
 
 export type BillTotals = {
@@ -151,6 +151,8 @@ export function orderTotals(order: Order): BillTotals {
       price: l.basePrice,
       addons: l.addons.map((a) => ({ price: a.price, qty: a.qty })),
       menuId: l.itemId,
+      // Goods items carry no tax - same rule as the exe's bill engine.
+      noTax: Boolean(settings.menuItems.find((m) => m.id === l.itemId)?.goods),
     })),
     orderType: order.type === "takeaway" ? "pickup" : "dinin",
     tableCategId,

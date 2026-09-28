@@ -64,6 +64,8 @@ export type MenuItem = {
   imageUrl?: string | undefined;
   variants?: Variant[] | undefined;
   addonGroups?: AddonGroup[] | undefined;
+  /** Goods item (menu gst_type "G"): no tax on the bill. */
+  goods?: boolean | undefined;
 };
 
 export type LineAddon = {

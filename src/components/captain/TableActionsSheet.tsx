@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { QtyStepper } from "./QtyStepper";
 import { useCaptain } from "@/lib/captain/store";
 import type { Order } from "@/lib/captain/types";
-import { ArrowRightLeft, GitMerge, Loader2, Users, XCircle } from "lucide-react";
+import { ArrowRightLeft, GitMerge, Loader2, Search, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@tanstack/react-router";
@@ -27,16 +27,38 @@ export function TableActionsSheet({
   const areaName = (areaId: string) => areas.find((a) => a.id === areaId)?.name ?? "";
   const navigate = useNavigate();
   const [panel, setPanel] = useState<Panel>("menu");
+  // With 100+ tables the merge/transfer lists are long (owner report,
+  // 2026-09-28): a search box narrows them by table or section name.
+  const [tableQuery, setTableQuery] = useState("");
+  const matchesQuery = (t: { name: string; areaId: string }) => {
+    const q = tableQuery.trim().toLowerCase();
+    return !q || t.name.toLowerCase().includes(q) || areaName(t.areaId).toLowerCase().includes(q);
+  };
+  const tableSearch = (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        value={tableQuery}
+        onChange={(e) => setTableQuery(e.target.value)}
+        placeholder="Search table or section"
+        aria-label="Search tables"
+        className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm"
+      />
+    </div>
+  );
   const [guests, setLocalGuests] = useState(order.guests);
   const [busy, setBusy] = useState(false);
 
   const close = () => {
     onOpenChange(false);
-    setTimeout(() => setPanel("menu"), 200);
+    setTimeout(() => {
+      setPanel("menu");
+      setTableQuery("");
+    }, 200);
   };
 
   // Held and billed orders are never merged (the exe refuses both).
-  const occupied = tables.filter((t) => {
+  const occupiedAll = tables.filter((t) => {
     const other = orderForTable(t.id);
     return (
       !order.tableIds.includes(t.id) &&
@@ -45,7 +67,9 @@ export function TableActionsSheet({
       other.status !== "billed"
     );
   });
-  const free = tables.filter((t) => !orderForTable(t.id) && t.status !== "reserved");
+  const freeAll = tables.filter((t) => !orderForTable(t.id) && t.status !== "reserved");
+  const occupied = occupiedAll.filter(matchesQuery);
+  const free = freeAll.filter(matchesQuery);
 
   return (
     <Drawer open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
@@ -100,6 +124,7 @@ export function TableActionsSheet({
                 The selected table's rounds and un-fired lines move into this order; that table is
                 freed.
               </p>
+              {occupiedAll.length > 6 ? tableSearch : null}
               {order.status === "held" ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   This order is on hold. Held orders can't be merged — use Transfer Table to move it
@@ -107,7 +132,7 @@ export function TableActionsSheet({
                 </p>
               ) : occupied.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
-                  No other occupied table to merge.
+                  {occupiedAll.length ? "No table matches." : "No other occupied table to merge."}
                 </p>
               ) : (
                 occupied.map((t) => (
@@ -148,6 +173,10 @@ export function TableActionsSheet({
               <p className="text-sm text-muted-foreground">
                 Every line, fired or not, moves with the order to the new table.
               </p>
+              {freeAll.length > 6 ? tableSearch : null}
+              {freeAll.length && !free.length ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No table matches.</p>
+              ) : null}
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {free.map((t) => (
                   <button

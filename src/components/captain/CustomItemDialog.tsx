@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { sanitizeQtyInput } from "@/lib/captain/qty";
+import { cs } from "@/lib/captain/currency";
 
 // A one-off item that is not on the menu (issue list 2026-09-24, issue 6).
 // It is taxed like the rest of the order, and with more than one KOT printer
@@ -58,7 +59,7 @@ export function CustomItemDialog({
     const p = Number(price);
     const q = Number(qty);
     if (!name.trim()) return setError("Enter the item name");
-    if (!(p > 0)) return setError("Price must be more than ₹0");
+    if (!(p > 0)) return setError(`Price must be more than ${cs()}0`);
     if (!(q > 0)) return setError("Quantity must be more than 0");
     if (askPrinter && !printerId) return setError("Choose which KOT printer prints this item");
     if (askKitchen && !kitchenId) return setError("Choose which kitchen display shows this item");
@@ -98,7 +99,7 @@ export function CustomItemDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="custom-price" required>
-                Price (₹)
+                Price ({cs()})
               </Label>
               <Input
                 id="custom-price"

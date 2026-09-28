@@ -2,6 +2,7 @@
 // contract the screens were written against; every read/write goes to
 // billerpe-local-exe (lib/exe/*), never to the cloud. Device-local state
 // (drafts, un-fired cart round, guest counts, alerts) lives in lib/captain/local.ts.
+import { setCurrency } from "./currency";
 import {
   createContext,
   useCallback,
@@ -131,6 +132,8 @@ export type SyncInfo = {
 
 type State = {
   captain: Captain | null;
+  /** "Edit or remove an item after its KOT has been sent" - the owner, or granted in Manage Users */
+  editAfterKot: boolean;
   restored: boolean;
   booting: boolean;
   refreshing: boolean;
@@ -202,8 +205,10 @@ type Ctx = Omit<State, "serverOrders" | "heldLines" | "settled" | "drafts" | "ca
   cancelOrder: (orderId: string) => Promise<boolean>;
   /** Delete one line from an already-fired round. The exe itself enforces who may - see canRemoveLine. */
   removeLine: (orderId: string, line: OrderLine) => Promise<boolean>;
-  /** Local, same-shape check the UI uses to decide whether to even show a delete control (the exe re-checks on the real call). */
+  /** Whether to show remove / reduce on a fired line (the exe re-checks on the real call). */
   canRemoveLine: (line: OrderLine) => boolean;
+  /** Lower one fired line's qty (never to 0 - that is removeLine). */
+  reduceLine: (orderId: string, line: OrderLine, qty: number) => Promise<boolean>;
   mergeTables: (sourceOrderId: string, targetTableId: string) => Promise<boolean>;
   transferTable: (orderId: string, targetTableId: string) => Promise<boolean>;
   markNotificationRead: (id: string) => void;
@@ -241,6 +246,7 @@ const lineSignature = (l: {
 export function CaptainProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>(() => ({
     captain: null,
+    editAfterKot: false,
     restored: false,
     booting: false,
     refreshing: false,
@@ -310,6 +316,8 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       taxApi.getAll().catch(() => null),
       billChargeApi.getAll().catch(() => null),
     ]);
+    // Every amount in the app follows the outlet's currency.
+    setCurrency(hotel.currency_code, hotel.currency);
     setBillSettings({
       gstOn: hotel.invoiceFormateIncGst !== false,
       serviceCharge: mapServiceCharge(hotel.hms_serviceCharge_mst),
@@ -350,11 +358,13 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       .filter((m) => m.active !== false)
       .map((m) => mapMenuItem(m, station, addonCatalog));
     menuMapRef.current = new Map(menu.map((m) => [m.id, m]));
-    setBillSettings({ menuItems: menu.map((m) => ({ id: m.id, categoryId: m.categoryId })) });
+    setBillSettings({ menuItems: menu.map((m) => ({ id: m.id, categoryId: m.categoryId, goods: m.goods })) });
     const usedCategories = new Set(menu.map((m) => m.categoryId));
     const categories = cats.catagories
       .filter((c) => c.active !== false && usedCategories.has(String(c.id)))
-      .sort((a, b) => (a.rank ?? a.id) - (b.rank ?? b.id))
+      // Menu > Categories order (rank), ties by id - the Web POS biller
+      // shows the same order.
+      .sort((a, b) => (a.rank ?? a.id) - (b.rank ?? b.id) || a.id - b.id)
       .map(mapCategory);
     const kotPrinters = (printers.printerSettings ?? [])
       .filter((p) => p.print_type === "K")
@@ -529,8 +539,20 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     }
   }, [loadFloor, patch]);
 
+  // Permission-only rule (owner decision, 2026-09-28): the owner can always,
+  // anyone else only with orders.editAfterKot.
+  const loadPermissions = useCallback(async () => {
+    try {
+      const p = await orderApi.myPermissions();
+      patch((s) => ({ ...s, editAfterKot: p.owner || p.special?.["orders.editAfterKot"] === true }));
+    } catch {
+      patch((s) => ({ ...s, editAfterKot: false }));
+    }
+  }, [patch]);
+
   const bootstrap = useCallback(async () => {
     patch((s) => ({ ...s, booting: true }));
+    void loadPermissions();
     const results = await Promise.allSettled([
       loadSettings(),
       loadMenu(),
@@ -544,7 +566,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     if (failed && !(failed.reason instanceof UnauthorizedError)) {
       toast.error(describeError(failed.reason, "Could not load outlet data from the local server"));
     }
-  }, [loadFloor, loadMenu, loadReservations, loadSettings, loadStaff, patch]);
+  }, [loadFloor, loadMenu, loadPermissions, loadReservations, loadSettings, loadStaff, patch]);
 
   // ---------- session ----------
   const logout = useCallback(() => {
@@ -736,6 +758,13 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authed) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // One category re-order saves several categories in a row - one menu
+    // re-read after the burst, not one per save racing each other.
+    let menuTimer: ReturnType<typeof setTimeout> | null = null;
+    const reloadMenu = () => {
+      if (menuTimer) clearTimeout(menuTimer);
+      menuTimer = setTimeout(() => void loadMenu().catch(() => {}), 700);
+    };
     const debounced = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => void loadFloor(false).catch(() => {}), 500);
@@ -758,9 +787,11 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
               e === "addonDepartments",
           )
         ) {
-          void loadMenu().catch(() => {});
+          reloadMenu();
         }
         if (entities.some((e) => e.startsWith("table"))) void loadFloor(false).catch(() => {});
+        // The owner changed someone's permissions - re-read ours.
+        if (entities.includes("permissions")) void loadPermissions();
         if (entities.some((e) => e === "taxTypes" || e === "serviceCharge" || e === "hotel")) {
           void loadSettings().catch(() => {});
         }
@@ -780,6 +811,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     return () => {
       disconnect();
       if (timer) clearTimeout(timer);
+      if (menuTimer) clearTimeout(menuTimer);
       clearInterval(poll);
       clearInterval(menuPoll);
       clearInterval(resPoll);
@@ -1355,16 +1387,25 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       }
     },
 
-    // Mirrors the exe's own real check (controller/kot.js#removeKotLine) so
-    // the delete control only even appears where it would actually be
-    // allowed - the exe re-checks this itself regardless, so nothing here
-    // is a real permission boundary on its own.
-    canRemoveLine: (line) => {
-      const captain = stateRef.current.captain;
-      if (!captain || line.firedById === undefined) return false;
-      const isManager = captain.role === "Manager" || captain.role === "Owner";
-      const isOwnRound = String(line.firedById) === captain.id;
-      return isManager || isOwnRound;
+    // Mirrors the exe's own check (controller/kot.js#canEditAfterKot) so the
+    // remove / reduce controls only appear where they would be allowed - the
+    // exe re-checks regardless, so nothing here is a permission boundary.
+    canRemoveLine: (line) =>
+      Boolean(stateRef.current.captain) && line.backendLineId !== undefined && stateRef.current.editAfterKot,
+
+    reduceLine: async (orderId, line, qty) => {
+      const order = ordersRef.current.find((o) => o.id === orderId);
+      if (!order || order.backendId === undefined || line.backendLineId === undefined) return false;
+      if (guard()) return false;
+      try {
+        await orderApi.reduceLine(order.backendId, line.backendLineId, qty);
+        toast.success(`${line.name} reduced to ${qty}`);
+        await loadFloor(false).catch(() => {});
+        return true;
+      } catch (err) {
+        toast.error(describeError(err, "Could not change the quantity"));
+        return false;
+      }
     },
 
     removeLine: async (orderId, line) => {

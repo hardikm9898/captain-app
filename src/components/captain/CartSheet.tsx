@@ -12,10 +12,10 @@ import {
 } from "@/components/ui/dialog";
 import { QtyStepper } from "./QtyStepper";
 import { StatusBadge } from "./StatusBadge";
-import { inr, timeOf } from "@/lib/captain/format";
+import { addonLabel, inr, timeOf } from "@/lib/captain/format";
 import { currentRoundOf, lineTotal, orderTotals, useCaptain } from "@/lib/captain/store";
 import type { Order, OrderLine } from "@/lib/captain/types";
-import { Loader2, Lock, PauseCircle, Plus, Send, Trash2 } from "lucide-react";
+import { Loader2, Lock, Minus, PauseCircle, Plus, Send, Trash2 } from "lucide-react";
 
 export function CartSheet({
   order,
@@ -32,7 +32,8 @@ export function CartSheet({
   onHold: () => void;
   busy?: "fire" | "hold" | null;
 }) {
-  const { updateLineQty, setLineNote, canRemoveLine, removeLine, blocked } = useCaptain();
+  const { updateLineQty, setLineNote, canRemoveLine, removeLine, reduceLine, blocked } = useCaptain();
+  const [reducing, setReducing] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<OrderLine | null>(null);
   const [removing, setRemoving] = useState(false);
   const totals = orderTotals(order);
@@ -87,7 +88,7 @@ export function CartSheet({
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{l.name}</p>
                           <p className="truncate text-xs text-muted-foreground">
-                            {[l.variantName, ...l.addons.map((a) => a.name)]
+                            {[l.variantName, ...l.addons.map(addonLabel)]
                               .filter(Boolean)
                               .join(" · ") || l.station}
                           </p>
@@ -107,6 +108,24 @@ export function CartSheet({
                         <div className="flex flex-col items-end gap-1">
                           {fired ? (
                             <span className="flex items-center gap-2">
+                              {/* One less of a sent item (3 -> 2), with "edit or
+                                  remove after KOT" - taking the last one off is
+                                  the remove below. */}
+                              {r.status !== "served" && canRemoveLine(l) && l.qty > 1 ? (
+                                <button
+                                  type="button"
+                                  aria-label={`One less ${l.name}`}
+                                  disabled={blocked || reducing === l.id}
+                                  onClick={async () => {
+                                    setReducing(l.id);
+                                    await reduceLine(order.id, l, roundQty(l.qty - 1));
+                                    setReducing(null);
+                                  }}
+                                  className="grid h-6 w-6 place-items-center rounded-full border border-border disabled:opacity-40"
+                                >
+                                  <Minus className="h-3.5 w-3.5" />
+                                </button>
+                              ) : null}
                               <span className="text-sm font-semibold tabular-nums">× {l.qty}</span>
                               {r.status !== "served" && canRemoveLine(l) ? (
                                 <button

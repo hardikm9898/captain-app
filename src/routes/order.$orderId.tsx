@@ -27,7 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { QtyStepper } from "@/components/captain/QtyStepper";
 import { CustomerDetailsDialog } from "@/components/captain/CustomerForm";
 import { elapsed, inr } from "@/lib/captain/format";
-import { currentRoundOf, orderTotals, useCaptain, type KotResult } from "@/lib/captain/store";
+import { currentRoundOf, lineTotal, orderTotals, useCaptain, type KotResult } from "@/lib/captain/store";
 import type { MenuItem } from "@/lib/captain/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -115,13 +115,21 @@ function OrderMenu() {
   );
   const items = useMemo(() => {
     const inMenu = activeMenu ? new Set(menuCategories.map((c) => c.id)) : null;
-    return menu.filter((m) => {
+    const list = menu.filter((m) => {
       if (inMenu && !inMenu.has(m.categoryId)) return false;
       if (vegOnly && !m.veg) return false;
       if (query) return m.name.toLowerCase().includes(query.toLowerCase());
       if (!categoryId) return true;
       return m.categoryId === categoryId;
     });
+    // "All" lists the items category by category, in the categories' own
+    // sort order (the chips above are already in it).
+    if (categoryId) return list;
+    const position = new Map(menuCategories.map((c, i) => [c.id, i]));
+    return list
+      .map((m, i) => ({ m, i }))
+      .sort((a, b) => (position.get(a.m.categoryId) ?? 1e9) - (position.get(b.m.categoryId) ?? 1e9) || a.i - b.i)
+      .map(({ m }) => m);
   }, [menu, menuCategories, activeMenu, categoryId, query, vegOnly]);
 
   if (!order) {
@@ -146,7 +154,8 @@ function OrderMenu() {
   const totals = orderTotals(order);
   const roundLines = round?.lines ?? [];
   const roundItems = roundQty(roundLines.reduce((s, l) => s + l.qty, 0));
-  const roundValue = roundLines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+  // lineTotal: addons by their own qty, not the dish qty (same as the bill).
+  const roundValue = roundLines.reduce((s, l) => s + lineTotal(l), 0);
   const readOnly =
     order.status === "billed" || order.status === "settled" || order.status === "cancelled";
 

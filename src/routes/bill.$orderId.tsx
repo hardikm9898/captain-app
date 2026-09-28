@@ -4,9 +4,10 @@ import { ArrowLeft, BellRing, Loader2, Printer, Receipt } from "lucide-react";
 import { AppShell, ScreenHeader } from "@/components/captain/AppShell";
 import { EmptyState } from "@/components/captain/States";
 import { Button } from "@/components/ui/button";
-import { inr, timeOf } from "@/lib/captain/format";
-import { orderTotals, useCaptain } from "@/lib/captain/store";
+import { addonLabel, inr, timeOf } from "@/lib/captain/format";
+import { lineTotal, orderTotals, useCaptain } from "@/lib/captain/store";
 import { toast } from "sonner";
+import { cs } from "@/lib/captain/currency";
 
 export const Route = createFileRoute("/bill/$orderId")({
   head: () => ({
@@ -99,11 +100,11 @@ function BillPreview() {
                           {l.variantName ? ` (${l.variantName})` : ""}
                           {l.addons.length ? (
                             <span className="block text-xs text-muted-foreground">
-                              + {l.addons.map((a) => a.name).join(", ")}
+                              + {l.addons.map(addonLabel).join(", ")}
                             </span>
                           ) : null}
                         </span>
-                        <span className="tabular-nums">{inr(l.qty * l.unitPrice)}</span>
+                        <span className="tabular-nums">{inr(lineTotal(l))}</span>
                       </li>
                     ))}
                   </ul>
@@ -121,7 +122,7 @@ function BillPreview() {
             {t.roundOff !== 0 ? (
               <Row
                 label="Round off"
-                value={`${t.roundOff > 0 ? "+" : "-"} ₹${Math.abs(t.roundOff).toFixed(2)}`}
+                value={`${t.roundOff > 0 ? "+" : "-"} ${cs()}${Math.abs(t.roundOff).toFixed(2)}`}
               />
             ) : null}
             <div className="flex items-center justify-between border-t border-border pt-2 text-base font-bold">
