@@ -315,6 +315,13 @@ export function mapServerOrder(raw: RawOrder, station: StationResolver): Order {
   };
 }
 
+// Who may use this app (owner, list 6 issue 9): Captain, Manager and
+// Cashier ("Biller" is the old name for a cashier). The exe refuses anyone
+// else at sign-in (controller/auth.js captainAppGate); this keeps the Owner,
+// kitchen and other staff out of the PIN suggestions too.
+const CAPTAIN_APP_ROLES = new Set(["Captain", "Manager", "Cashier", "Biller"]);
+export const canUseCaptainApp = (c: Captain) => CAPTAIN_APP_ROLES.has(c.role);
+
 export function mapCaptain(u: RawHotelUser): Captain {
   const role = u.role_mst?.role_name ?? "Captain";
   const roleLabel =

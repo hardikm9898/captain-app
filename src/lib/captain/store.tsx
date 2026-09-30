@@ -51,6 +51,7 @@ import {
   mapAddonGroup,
   mapArea,
   mapCaptain,
+  canUseCaptainApp,
   mapCategory,
   mapMenuCatalog,
   mapHeldLines,
@@ -274,7 +275,8 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     reservations: [],
     notifications: notificationStore.get(),
     outlet: outletCache.get() ?? DEFAULT_OUTLET,
-    captains: staffCache.get(),
+    // A list cached by an older build may still hold the Owner or kitchen staff.
+    captains: (staffCache.get() ?? []).filter(canUseCaptainApp),
   }));
 
   const stateRef = useRef(state);
@@ -336,7 +338,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
 
   const loadStaff = useCallback(async () => {
     const { hotelUsers } = await hotelApi.getUsers();
-    const captains = hotelUsers.filter((u) => u.active).map(mapCaptain);
+    const captains = hotelUsers.filter((u) => u.active).map(mapCaptain).filter(canUseCaptainApp);
     staffCache.set(captains);
     patch((s) => ({ ...s, captains }));
   }, [patch]);
