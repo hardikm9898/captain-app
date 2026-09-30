@@ -55,7 +55,7 @@ function Notifications() {
       {list.length === 0 ? (
         <EmptyState icon={Bell} title="No alerts yet" body="Kitchen and sync updates land here." />
       ) : (
-        <div className="space-y-2 md:grid md:grid-cols-2 md:gap-2 md:space-y-0 md:items-start">
+        <div className="space-y-2 md:grid md:grid-cols-2 xl:grid-cols-3 md:gap-2 md:space-y-0 md:items-start">
           {list.map((n) => {
             const Icon = iconFor(n.kind);
             const body = (

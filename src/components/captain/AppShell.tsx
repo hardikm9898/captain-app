@@ -14,9 +14,10 @@ const nav = [
   { to: "/profile", label: "Profile", icon: User },
 ] as const;
 
-// Phone-first shell. On tablets the same column simply widens (max-w-3xl →
-// max-w-5xl at lg) so grids get more columns without changing the design.
-export const SHELL_WIDTH = "max-w-3xl lg:max-w-5xl";
+// Phone-first shell. On tablets the same column widens (max-w-3xl → 5xl at
+// lg → 7xl at xl) so grids get more columns without changing the design; a
+// landscape tablet uses its whole width (owner, list 6 issue 11).
+export const SHELL_WIDTH = "max-w-3xl lg:max-w-5xl xl:max-w-7xl";
 
 export function AppShell({
   children,

@@ -168,7 +168,7 @@ function TableGrid() {
           }
         />
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {shown.map((t) => {
             // Only an order the exe has (KOT / save / hold) shows on the card; a
             // draft still in this phone's cart leaves the table looking free.

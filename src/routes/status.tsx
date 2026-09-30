@@ -65,7 +65,7 @@ function StatusScreen() {
           body="Fired KOT rounds and their kitchen progress appear on this screen."
         />
       ) : (
-        <div className="mt-2 space-y-2 md:grid md:grid-cols-2 md:gap-2 md:space-y-0 md:items-start">
+        <div className="mt-2 space-y-2 md:grid md:grid-cols-2 xl:grid-cols-3 md:gap-2 md:space-y-0 md:items-start">
           {rows.map(({ order, round }) => {
             const label =
               order.type === "takeaway"

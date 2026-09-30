@@ -31,7 +31,7 @@ function Reservations() {
       {reservations.length === 0 ? (
         <EmptyState icon={CalendarClock} title="No bookings today" />
       ) : (
-        <div className="mt-3 space-y-2 md:grid md:grid-cols-2 md:gap-2 md:space-y-0">
+        <div className="mt-3 space-y-2 md:grid md:grid-cols-2 xl:grid-cols-3 md:gap-2 md:space-y-0">
           {reservations.map((r) => (
             <div key={r.id} className="rounded-2xl border border-border bg-card p-4">
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">

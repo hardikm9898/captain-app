@@ -67,7 +67,7 @@ function OrdersScreen() {
       {list.length === 0 ? (
         <EmptyState icon={ReceiptText} title="Nothing in this tab yet" />
       ) : (
-        <div className="mt-2 space-y-2 md:grid md:grid-cols-2 md:gap-2 md:space-y-0">
+        <div className="mt-2 space-y-2 md:grid md:grid-cols-2 xl:grid-cols-3 md:gap-2 md:space-y-0">
           {list.map((o) => {
             const totals = orderTotals(o);
             const total =

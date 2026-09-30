@@ -17,7 +17,8 @@ import {
 } from "lucide-react";
 import { AppShell, ScreenHeader, SHELL_WIDTH } from "@/components/captain/AppShell";
 import { Chip, ChipRow } from "@/components/captain/Chip";
-import { CartSheet } from "@/components/captain/CartSheet";
+import { CartPanel, CartSheet } from "@/components/captain/CartSheet";
+import { useIsWide } from "@/hooks/use-mobile";
 import { VariantSheet } from "@/components/captain/VariantSheet";
 import { TableActionsSheet } from "@/components/captain/TableActionsSheet";
 import { EmptyState, LoadingState } from "@/components/captain/States";
@@ -69,6 +70,8 @@ function OrderMenu() {
     setOrderMenu,
   } = useCaptain();
   const navigate = useNavigate();
+  // Landscape tablet: the cart sits beside the menu (no bottom bar / sheet).
+  const wide = useIsWide();
   const order = orderById(orderId);
   // Back without adding anything: the table was only looked at, so the
   // draft opened for it is dropped (and never shown as an order).
@@ -171,7 +174,8 @@ function OrderMenu() {
   const firedSummary = (() => {
     const byName = new Map<string, number>();
     firedLines.forEach((l) => byName.set(l.name, (byName.get(l.name) ?? 0) + l.qty));
-    return [...byName.entries()].map(([name, qty]) => `${qty}× ${name}`);
+    // roundQty: 1.25 + 2.52 is 3.7699999999999996 in floating point.
+    return [...byName.entries()].map(([name, qty]) => `${roundQty(qty)}× ${name}`);
   })();
 
   const tap = (item: MenuItem) => {
@@ -382,18 +386,18 @@ function OrderMenu() {
       {/* Phone: horizontal chip row. Tablet (md+): the same chips as a left rail. */}
       <ChipRow className="mt-3 md:hidden">{categoryRail}</ChipRow>
 
-      <div className="md:mt-3 md:grid md:grid-cols-[11rem_minmax(0,1fr)] md:gap-4">
+      <div className="md:mt-3 md:grid md:grid-cols-[11rem_minmax(0,1fr)] md:gap-4 lg:grid-cols-[11rem_minmax(0,1fr)_22rem]">
         <aside className="no-scrollbar hidden max-h-[calc(100vh-14rem)] flex-col gap-2 overflow-y-auto md:sticky md:top-32 md:flex">
           {categoryRail}
         </aside>
 
-        <div className="mt-2 grid gap-2 pb-4 sm:grid-cols-2 md:mt-0 xl:grid-cols-3">
+        <div className="mt-2 grid content-start gap-2 pb-4 sm:grid-cols-2 md:mt-0 2xl:grid-cols-3">
           {menu.length === 0 && booting ? (
-            <div className="sm:col-span-2 xl:col-span-3">
+            <div className="sm:col-span-2 2xl:col-span-3">
               <LoadingState label="Loading menu" />
             </div>
           ) : items.length === 0 ? (
-            <div className="sm:col-span-2 xl:col-span-3">
+            <div className="sm:col-span-2 2xl:col-span-3">
               <EmptyState
                 icon={ChefHat}
                 title="Nothing matches"
@@ -492,10 +496,34 @@ function OrderMenu() {
             })
           )}
         </div>
+
+        {wide ? (
+          <aside
+            aria-label="Cart"
+            className="hidden lg:sticky lg:top-32 lg:flex lg:max-h-[calc(100vh-9rem)] lg:flex-col lg:self-start lg:overflow-hidden lg:rounded-3xl lg:border lg:border-border lg:bg-card"
+          >
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <ShoppingCart className="h-4 w-4 text-brand" />
+              <p className="font-semibold">Cart</p>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {roundItems > 0
+                  ? `Round ${round?.no} · ${roundItems} item${roundItems === 1 ? "" : "s"}`
+                  : "Tap Add on a dish"}
+              </span>
+            </div>
+            <CartPanel
+              order={order}
+              onFire={() => void onFire()}
+              onHold={() => void onHold()}
+              busy={busy}
+              listClassName="min-h-0 flex-1 pt-3"
+            />
+          </aside>
+        ) : null}
       </div>
 
       <AnimatePresence>
-        {roundItems > 0 ? (
+        {roundItems > 0 && !wide ? (
           <motion.button
             type="button"
             initial={{ y: 80 }}
@@ -556,7 +584,7 @@ function OrderMenu() {
       />
       <CartSheet
         order={order}
-        open={cartOpen}
+        open={cartOpen && !wide}
         onOpenChange={setCartOpen}
         onFire={() => void onFire()}
         onHold={() => void onHold()}
