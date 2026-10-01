@@ -21,7 +21,7 @@ export const Route = createFileRoute("/profile")({
   component: Profile,
 });
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.4";
 
 // BillerPe customer care (owner list 2026-09-30 #9) - same number as the
 // Web POS Help page and BillerPe's e-mails.
