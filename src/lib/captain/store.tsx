@@ -118,7 +118,14 @@ export type NewLineInput = {
   variantId?: string | undefined;
   variantName?: string | undefined;
   unitPrice: number;
-  addons: { id?: string | undefined; groupId?: string | undefined; name: string; price: number }[];
+  addons: {
+    id?: string | undefined;
+    groupId?: string | undefined;
+    name: string;
+    price: number;
+    /** How many of this addon (default 1). */
+    qty?: number | undefined;
+  }[];
   note?: string | undefined;
 };
 
@@ -240,9 +247,12 @@ function withoutEmptyDrafts(drafts: Record<string, Order>, carts: Record<string,
 const lineSignature = (l: {
   itemId: string;
   variantName?: string | undefined;
-  addons: { name: string }[];
+  addons: { name: string; qty?: number | undefined }[];
   note?: string | undefined;
-}) => `${l.itemId}|${l.variantName ?? ""}|${l.addons.map((a) => a.name).join(",")}|${l.note ?? ""}`;
+}) =>
+  // Addon qty is part of what makes two lines the same dish ("Cheese ×2" is
+  // not "Cheese").
+  `${l.itemId}|${l.variantName ?? ""}|${l.addons.map((a) => `${a.name}×${a.qty ?? 1}`).join(",")}|${l.note ?? ""}`;
 
 export function CaptainProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>(() => ({
@@ -1171,7 +1181,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
         return {
           name: a.name,
           price: a.price,
-          qty: 1,
+          qty: a.qty && a.qty > 0 ? a.qty : 1,
           id: a.id ? Number(a.id) : undefined,
           groupId: a.groupId ? Number(a.groupId) : undefined,
           groupName: group?.name,
@@ -1199,7 +1209,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
           note: input.note,
           qty: input.qty,
           basePrice: input.unitPrice,
-          unitPrice: input.unitPrice + addons.reduce((s, a) => s + a.price, 0),
+          unitPrice: input.unitPrice + addons.reduce((s, a) => s + a.price * a.qty, 0),
           station: item.station,
           categoryId: item.categoryId,
         };

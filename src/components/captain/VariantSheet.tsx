@@ -7,7 +7,8 @@ import { inr } from "@/lib/captain/format";
 import type { MenuItem } from "@/lib/captain/types";
 import type { NewLineInput } from "@/lib/captain/store";
 import { cn } from "@/lib/utils";
-import { Check } from "lucide-react";
+import { Check, Minus, Plus } from "lucide-react";
+import { engineLineTotal } from "@/lib/captain/billEngine";
 
 export function VariantSheet({
   item,
@@ -20,6 +21,9 @@ export function VariantSheet({
 }) {
   const [variantId, setVariantId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Record<string, string[]>>({});
+  // How many of each picked addon ("Cheese ×2") - same as the Web POS
+  // (owner list 2026-09-30 #8). Keyed `${groupId}:${optionId}`; 1 when absent.
+  const [addonQty, setAddonQty] = useState<Record<string, number>>({});
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState("");
 
@@ -31,6 +35,7 @@ export function VariantSheet({
       init[g.id] = g.min > 0 && g.options[0] ? [g.options[0].id] : [];
     });
     setSelected(init);
+    setAddonQty({});
     setQty(1);
     setNote("");
   }, [item]);
@@ -44,11 +49,19 @@ export function VariantSheet({
       (selected[g.id] ?? [])
         .map((id) => g.options.find((o) => o.id === id))
         .filter((o): o is NonNullable<typeof o> => Boolean(o))
-        .map((o) => ({ id: o.id, groupId: g.id, name: o.name, price: o.price })),
+        .map((o) => ({
+          id: o.id,
+          groupId: g.id,
+          name: o.name,
+          price: o.price,
+          qty: addonQty[`${g.id}:${o.id}`] ?? 1,
+        })),
     );
-  }, [item, selected]);
+  }, [item, selected, addonQty]);
 
-  const unit = base + addons.reduce((s, a) => s + a.price, 0);
+  // Same figure as the cart and the bill: addons by their own qty, not
+  // multiplied by the dish qty (helpers/billEngine.js).
+  const total = engineLineTotal({ qty, price: base, addons });
 
   const valid = item?.addonGroups?.every((g) => (selected[g.id] ?? []).length >= g.min) ?? true;
 
@@ -133,24 +146,77 @@ export function VariantSheet({
                         ? "pick 1"
                         : "optional"}
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-2">
                     {g.options.map((o) => {
                       const on = (selected[g.id] ?? []).includes(o.id);
+                      const key = `${g.id}:${o.id}`;
+                      const n = addonQty[key] ?? 1;
+                      // A required single pick can't be stepped down to none.
+                      const keepOne = !g.multiple && g.min > 0;
                       return (
-                        <button
+                        <div
                           key={o.id}
-                          type="button"
-                          onClick={() => toggle(g.id, o.id, g.multiple, g.max, g.min)}
+                          data-addon-option={o.name}
                           className={cn(
-                            "rounded-full border px-3.5 py-2 text-sm font-medium",
-                            on
-                              ? "border-brand bg-brand text-brand-foreground"
-                              : "border-border bg-card",
+                            "flex items-center justify-between gap-2 rounded-2xl border pl-3.5",
+                            on ? "border-brand bg-brand-soft" : "border-border bg-card",
                           )}
                         >
-                          {o.name}
-                          {o.price > 0 ? ` +${inr(o.price)}` : ""}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              toggle(g.id, o.id, g.multiple, g.max, g.min);
+                              setAddonQty((prev) => {
+                                const { [key]: _drop, ...rest } = prev;
+                                return rest;
+                              });
+                            }}
+                            className="flex min-h-11 flex-1 items-center gap-2 py-2 text-left text-sm font-medium"
+                          >
+                            <span
+                              className={cn(
+                                "grid h-5 w-5 shrink-0 place-items-center rounded-md border-2",
+                                on ? "border-brand bg-brand" : "border-border",
+                              )}
+                            >
+                              {on ? <Check className="h-3 w-3 text-brand-foreground" /> : null}
+                            </span>
+                            {o.name}
+                            {o.price > 0 ? (
+                              <span className="text-muted-foreground"> +{inr(o.price)}</span>
+                            ) : null}
+                          </button>
+                          {on ? (
+                            <div className="flex items-center gap-1 pr-1.5">
+                              <button
+                                type="button"
+                                aria-label={`Fewer ${o.name}`}
+                                disabled={n <= 1 && keepOne}
+                                onClick={() => {
+                                  if (n <= 1) {
+                                    toggle(g.id, o.id, g.multiple, g.max, g.min);
+                                    return;
+                                  }
+                                  setAddonQty((prev) => ({ ...prev, [key]: n - 1 }));
+                                }}
+                                className="grid h-9 w-9 place-items-center rounded-full border border-border bg-card disabled:opacity-40"
+                              >
+                                <Minus className="h-4 w-4" />
+                              </button>
+                              <span className="w-6 text-center text-sm font-semibold tabular-nums">
+                                {n}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label={`More ${o.name}`}
+                                onClick={() => setAddonQty((prev) => ({ ...prev, [key]: n + 1 }))}
+                                className="grid h-9 w-9 place-items-center rounded-full border border-border bg-card"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>
@@ -187,7 +253,7 @@ export function VariantSheet({
                   onClose();
                 }}
               >
-                Add · {inr(unit * qty)}
+                Add · {inr(total)}
               </Button>
             </div>
           </>
