@@ -1330,7 +1330,8 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
         const items = order.rounds
           .filter((r) => r.firedAt)
           .flatMap((r) => r.lines.map((l) => toKotItem(l, r.no)));
-        await orderApi.adminOrder(buildPayload(order, items, true));
+        // bill_request: the cashier gets a sound + pop-up on the Web POS.
+        await orderApi.adminOrder({ ...buildPayload(order, items, true), bill_request: true });
         prevServerRef.current.set(order.backendId, {
           rounds: order.rounds.filter((r) => r.firedAt).length,
           status: "billed",

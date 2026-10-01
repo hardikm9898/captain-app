@@ -319,6 +319,8 @@ export type OrderPayload = {
   mobile?: string;
   gstin?: string;
   address?: string;
+  /** Set on the captain's "Request bill": the exe alerts the cashier. */
+  bill_request?: boolean;
   cart: CartPayload;
 };
 
