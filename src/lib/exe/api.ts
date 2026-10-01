@@ -192,6 +192,9 @@ export type RawMenuItem = {
   foodImage: string | null;
   menu_categ_id: number;
   gst_type?: "S" | "G";
+  /** "all" = none set (the exe's default). */
+  shortCode?: string | null;
+  barcode_value?: string | null;
   variantData?: RawMenuItemVariant[];
   addonDepartmentData?: RawAddonGroup[];
 };

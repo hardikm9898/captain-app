@@ -66,6 +66,9 @@ export type MenuItem = {
   addonGroups?: AddonGroup[] | undefined;
   /** Goods item (menu gst_type "G"): no tax on the bill. */
   goods?: boolean | undefined;
+  /** Short code staff type to find the dish (Web POS "Short code"). */
+  shortCode?: string | undefined;
+  barcode?: string | undefined;
 };
 
 export type LineAddon = {

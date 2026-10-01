@@ -31,6 +31,7 @@ import type {
   TableArea,
   TableStatus,
 } from "./types";
+import { itemShortCode } from "./menuSearch";
 
 export const TABLE_STATUS: Record<RawTable["table_status"], TableStatus> = {
   F: "free",
@@ -158,6 +159,8 @@ export function mapMenuItem(
     station: station(m.menu_categ_id),
     imageUrl: m.foodImage || undefined,
     goods: m.gst_type === "G",
+    shortCode: itemShortCode(m.shortCode),
+    barcode: m.barcode_value?.trim() || undefined,
     ...(variants.length ? { variants } : {}),
     ...(addonGroups.length ? { addonGroups } : {}),
   };

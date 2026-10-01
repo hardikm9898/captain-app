@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { CustomItemDialog } from "@/components/captain/CustomItemDialog";
 import { roundQty } from "@/lib/captain/qty";
+import { searchMenuItems } from "@/lib/captain/menuSearch";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowLeft,
@@ -48,6 +49,9 @@ export const Route = createFileRoute("/order/$orderId")({
 });
 
 const pendingDiscard = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** The Favourites "category" (not a real category id). */
+const FAVOURITES = "__favourites";
 
 function OrderMenu() {
   const { orderId } = Route.useParams();
@@ -116,18 +120,30 @@ function OrderMenu() {
         : categories,
     [categories, activeMenu, defaultMenuId],
   );
+  const hasFavourites = useMemo(
+    () => {
+      const inMenu = activeMenu ? new Set(menuCategories.map((c) => c.id)) : null;
+      return menu.some((m) => m.favourite && (!inMenu || inMenu.has(m.categoryId)));
+    },
+    [menu, menuCategories, activeMenu],
+  );
   const items = useMemo(() => {
     const inMenu = activeMenu ? new Set(menuCategories.map((c) => c.id)) : null;
     const list = menu.filter((m) => {
       if (inMenu && !inMenu.has(m.categoryId)) return false;
       if (vegOnly && !m.veg) return false;
-      if (query) return m.name.toLowerCase().includes(query.toLowerCase());
+      if (query) return true;
       if (!categoryId) return true;
+      if (categoryId === FAVOURITES) return Boolean(m.favourite);
       return m.categoryId === categoryId;
     });
-    // "All" lists the items category by category, in the categories' own
-    // sort order (the chips above are already in it).
-    if (categoryId) return list;
+    // A search looks across the whole menu by short code, barcode and name,
+    // best match first - same as the Web POS (owner list 2026-09-30 #11; it
+    // used to match the name only, so a short code found nothing).
+    if (query) return searchMenuItems(list, query);
+    // "All" and Favourites list the items category by category, in the
+    // categories' own sort order (the chips above are already in it).
+    if (categoryId && categoryId !== FAVOURITES) return list;
     const position = new Map(menuCategories.map((c, i) => [c.id, i]));
     return list
       .map((m, i) => ({ m, i }))
@@ -232,6 +248,20 @@ function OrderMenu() {
       >
         All
       </Chip>
+      {/* The dishes marked Favourite in the Web POS menu, as on the Web POS
+          order screen (owner list 2026-09-30 #11). */}
+      {hasFavourites ? (
+        <Chip
+          active={!query && categoryId === FAVOURITES}
+          onClick={() => {
+            setQuery("");
+            setCategoryId(FAVOURITES);
+          }}
+          className="md:w-full md:text-left"
+        >
+          ★ Favourites
+        </Chip>
+      ) : null}
       {menuCategories.map((c) => (
         <Chip
           key={c.id}
@@ -378,7 +408,7 @@ function OrderMenu() {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search the menu"
+          placeholder="Search by name or short code"
           className="h-12 pl-9"
         />
       </div>
@@ -465,6 +495,7 @@ function OrderMenu() {
                       </span>
                       <span className="mt-1 block text-xs text-muted-foreground">
                         {inr(item.price)}
+                        {item.shortCode ? ` · ${item.shortCode}` : ""}
                         {configurable ? " · options" : ""} · {item.station}
                       </span>
                     </span>
