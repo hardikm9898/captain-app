@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { LifeBuoy, LogOut, RefreshCw, ShieldCheck, Store, Wifi } from "lucide-react";
+import { LifeBuoy, LogOut, Phone, RefreshCw, ShieldCheck, Store, Wifi } from "lucide-react";
 import { AppShell, ScreenHeader } from "@/components/captain/AppShell";
 import { Button } from "@/components/ui/button";
 import { orderTotals, useCaptain } from "@/lib/captain/store";
@@ -22,6 +22,10 @@ export const Route = createFileRoute("/profile")({
 });
 
 const APP_VERSION = "1.0.0";
+
+// BillerPe customer care (owner list 2026-09-30 #9) - same number as the
+// Web POS Help page and BillerPe's e-mails.
+const CARE_NUMBER = "+91 97371 00886";
 
 function Profile() {
   const { captain, logout, orders, connection, sync, outlet, recheckConnection } = useCaptain();
@@ -100,8 +104,23 @@ function Profile() {
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           PIN changes and password resets are done by the outlet owner in the BillerPe Web POS
-          (Users). For app issues contact BillerPe support.
+          (Users). For app issues contact BillerPe customer care.
         </p>
+        <a
+          href={`tel:${CARE_NUMBER.replace(/\s/g, "")}`}
+          data-care-number
+          className="mt-3 flex items-center gap-3 rounded-2xl bg-secondary px-3 py-2.5"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand text-brand-foreground">
+            <Phone className="h-4 w-4" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold tabular-nums">{CARE_NUMBER}</span>
+            <span className="block text-[11px] text-muted-foreground">
+              BillerPe customer care · tap to call
+            </span>
+          </span>
+        </a>
         <p className="mt-2 text-[11px] text-muted-foreground">BillerPe Captain v{APP_VERSION}</p>
       </div>
 
