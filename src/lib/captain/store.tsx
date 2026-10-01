@@ -821,6 +821,30 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
         logout();
         toast.error("Signed out", { description: "This account signed in on another device." });
       },
+      // The kitchen rejected an item this captain punched (owner list
+      // 2026-09-30 #18): bell, a toast that stays until tapped, and an
+      // entry in Alerts. Other captains are not disturbed.
+      onStaffAlert: (alert) => {
+        if (alert.kind !== "kitchen-reject") return;
+        const me = stateRef.current.captain?.id;
+        if (!me || alert.targetUserId == null || String(alert.targetUserId) !== me) return;
+        const orderId = alert.orderId != null ? String(alert.orderId) : undefined;
+        pushNotification({
+          id: alert.id,
+          kind: "kitchen-reject",
+          title: alert.title,
+          body: alert.body ?? "",
+          orderId,
+        });
+        playOrderReadyBell();
+        toast.error(alert.title, {
+          id: alert.id,
+          description: alert.body,
+          duration: Infinity,
+          action: { label: "OK", onClick: () => {} },
+        });
+        debounced();
+      },
     });
     const poll = setInterval(() => void loadFloor(false).catch(() => {}), 20000);
     const menuPoll = setInterval(() => void loadMenu().catch(() => {}), 15 * 60_000);

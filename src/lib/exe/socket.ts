@@ -6,6 +6,17 @@ import { io, type Socket } from "socket.io-client";
 import { getBaseUrl } from "./discovery";
 import { getStoredToken } from "./client";
 
+export type StaffAlert = {
+  id: string;
+  kind: string;
+  title: string;
+  body?: string;
+  orderId?: number;
+  tableId?: number | null;
+  /** The staff member it is about - the captain who punched a rejected item. */
+  targetUserId?: number | null;
+};
+
 export function connectChangeFeed(handlers: {
   onChange: (
     orderId: number,
@@ -21,6 +32,8 @@ export function connectChangeFeed(handlers: {
   onDisconnect?: () => void;
   /** This user logged in on another device - single-device policy, controller/auth.js#issueSession. */
   onForceLogout?: (reason?: string) => void;
+  /** Something staff must act on (exe connection/socket.js#emitStaffAlert) - e.g. the kitchen rejected an item. */
+  onStaffAlert?: (alert: StaffAlert) => void;
 }): () => void {
   const token = getStoredToken();
   if (!token) return () => {};
@@ -51,6 +64,9 @@ export function connectChangeFeed(handlers: {
   });
   socket.on("forceLogout", (data: { reason?: string }) => {
     handlers.onForceLogout?.(data?.reason);
+  });
+  socket.on("staffAlert", (data: StaffAlert) => {
+    if (data && typeof data.id === "string") handlers.onStaffAlert?.(data);
   });
   return () => {
     socket.removeAllListeners();

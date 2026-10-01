@@ -222,6 +222,7 @@ export function mapServerLine(
     categoryId: categoryId != null ? String(categoryId) : undefined,
     backendLineId: l.id,
     firedById: l.firedBy ?? undefined,
+    ...(l.kds_status === "rejected" ? { kitchenRejected: l.kds_reject_reason || "Rejected" } : {}),
     routePrinterId: l.route_printer_id ?? undefined,
     routeKitchenId: l.route_kitchen_id ?? undefined,
   };
@@ -256,7 +257,10 @@ export function mapFiredRounds(raw: RawOrder, station: StationResolver): KotRoun
       // Kitchen Display (POST /kotReady) - every still-cooking line in the
       // round has to be flagged ready for the round itself to read ready.
       const allDelivered = lines.every((l) => l.status === "delivered");
-      const allReady = !allDelivered && lines.every((l) => l.status !== "kot" || l.ready);
+      // A line the kitchen rejected will never be cooked: it neither holds
+      // the round back nor makes it "ready" on its own.
+      const cooking = lines.filter((l) => l.kds_status !== "rejected");
+      const allReady = !allDelivered && cooking.length > 0 && cooking.every((l) => l.status !== "kot" || l.ready);
       const status: KotStatus = allDelivered
         ? "served"
         : allReady

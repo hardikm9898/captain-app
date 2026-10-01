@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bell, BellRing, CalendarClock, CheckCheck, RefreshCw, Soup } from "lucide-react";
+import { Ban, Bell, BellRing, CalendarClock, CheckCheck, RefreshCw, Soup } from "lucide-react";
 import { AppShell, ScreenHeader } from "@/components/captain/AppShell";
 import { EmptyState } from "@/components/captain/States";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,9 @@ const iconFor = (kind: AppNotification["kind"]) =>
       ? Soup
       : kind === "reservation"
         ? CalendarClock
-        : RefreshCw;
+        : kind === "kitchen-reject"
+          ? Ban
+          : RefreshCw;
 
 function Notifications() {
   const { notifications, markNotificationRead, markAllNotificationsRead, unreadCount } =

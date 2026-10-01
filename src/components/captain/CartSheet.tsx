@@ -124,6 +124,14 @@ export function CartPanel({
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{l.name}</p>
+                        {l.kitchenRejected ? (
+                          <p
+                            data-kitchen-rejected
+                            className="text-xs font-semibold text-destructive"
+                          >
+                            Rejected by kitchen · {l.kitchenRejected}
+                          </p>
+                        ) : null}
                         <p className="truncate text-xs text-muted-foreground">
                           {[l.variantName, ...l.addons.map(addonLabel)]
                             .filter(Boolean)

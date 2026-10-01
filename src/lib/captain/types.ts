@@ -100,6 +100,8 @@ export type OrderLine = {
   backendLineId?: number | undefined;
   /** Which captain (HotelUser id) fired this line - deletion is restricted to them or a Manager/Owner. */
   firedById?: number | undefined;
+  /** The kitchen rejected this line on the KDS - why. Still on the bill until removed. */
+  kitchenRejected?: string | undefined;
   /** Added by the captain, not on the menu ("Custom item"). */
   custom?: boolean | undefined;
   /** A custom item's chosen KOT printer / KDS kitchen - only asked when the outlet has more than one. */
@@ -165,7 +167,7 @@ export type Reservation = {
 
 export type AppNotification = {
   id: string;
-  kind: "item-ready" | "kot-accepted" | "reservation" | "sync";
+  kind: "item-ready" | "kot-accepted" | "reservation" | "sync" | "kitchen-reject";
   title: string;
   body: string;
   time: string;

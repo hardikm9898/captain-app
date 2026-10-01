@@ -236,6 +236,9 @@ export type RawOrderLine = {
   ready: boolean;
   /** HotelUser id of whoever fired this line's round - POST /kotItemRemove's permission check. */
   firedBy: number | null;
+  /** Kitchen Display stage; "rejected" = the kitchen refused it (with the reason). */
+  kds_status?: string | null;
+  kds_reject_reason?: string | null;
   createdAt: string;
   updatedAt: string;
   hms_menu_mst?: { id: number; item_name?: string; menu_categ_id?: number } | null;
