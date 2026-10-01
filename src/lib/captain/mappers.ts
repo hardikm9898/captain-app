@@ -357,6 +357,32 @@ export function mapReservation(r: RawReservation): Reservation {
   };
 }
 
+/**
+ * A booking time as an absolute moment, read the way the exe reads it
+ * (billerpe-local-exe services/reservationTableSync.js#bookingMoment): newer
+ * rows are local "YYYY-MM-DDTHH:mm[:ss]", older ones only "HH:mm" on the
+ * booking date. Null when unreadable.
+ */
+export function bookingMoment(bookingDate: string, value: string | undefined): number | null {
+  const text = String(value ?? "").trim();
+  let y: number;
+  let mo: number;
+  let d: number;
+  let timePart = text;
+  const dated = /^(\d{4})-(\d{2})-(\d{2})[T ](.*)$/.exec(text);
+  if (dated) {
+    [y, mo, d] = [Number(dated[1]), Number(dated[2]), Number(dated[3])];
+    timePart = dated[4] ?? "";
+  } else {
+    const day = new Date(bookingDate);
+    if (Number.isNaN(day.getTime())) return null;
+    [y, mo, d] = [day.getFullYear(), day.getMonth() + 1, day.getDate()];
+  }
+  const t = /^(\d{1,2}):(\d{2})/.exec(timePart);
+  if (!t) return null;
+  return new Date(y, mo - 1, d, Number(t[1]), Number(t[2])).getTime();
+}
+
 export function isToday(iso: string): boolean {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return false;

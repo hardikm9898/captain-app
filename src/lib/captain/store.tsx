@@ -46,6 +46,7 @@ import {
 import { connectChangeFeed } from "@/lib/exe/socket";
 import { roundQty } from "@/lib/captain/qty";
 import {
+  bookingMoment,
   buildStationResolver,
   isToday,
   mapAddonGroup,
@@ -291,6 +292,14 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
 
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Re-reads the clock so a booking's "Reserved hh:mm" label disappears once
+  // it has ended, without waiting for the next reload (owner list
+  // 2026-09-30 #15).
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
   const stationRef = useRef<StationResolver>(() => "Kitchen");
   const menuMapRef = useRef<Map<string, MenuItem>>(new Map());
   const patch = useCallback((fn: (s: State) => State) => setState(fn), []);
@@ -876,16 +885,28 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
   ]);
 
   const tables = useMemo<RestaurantTable[]>(() => {
+    // Today's bookings that have not ended yet, earliest first: a table
+    // shows "Reserved 20:00-21:00" until the booking's end time. An ended
+    // booking kept its label under a Free table (owner list 2026-09-30 #15).
+    const hhmm = (ms: number) =>
+      new Date(ms).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
     const reservedByTable = new Map<string, string>();
-    state.reservations.forEach((r) => {
-      const t = new Date(r.time);
-      const label = Number.isNaN(t.getTime())
-        ? r.time
-        : t.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
-      r.tableIds.forEach((id) => {
-        if (!reservedByTable.has(id)) reservedByTable.set(id, label);
+    state.reservations
+      .map((r) => {
+        const start = bookingMoment(r.date, r.time);
+        let end = bookingMoment(r.date, r.endTime);
+        // 23:00 -> 01:00 runs past midnight (same rule as the exe).
+        if (start != null && end != null && end <= start) end += 24 * 60 * 60 * 1000;
+        return { r, start, end };
+      })
+      .filter(({ start, end }) => start != null && (end == null || clock < end))
+      .sort((a, b) => (a.start ?? 0) - (b.start ?? 0))
+      .forEach(({ r, start, end }) => {
+        const label = `${hhmm(start!)}${end != null ? `–${hhmm(end)}` : ""}`;
+        r.tableIds.forEach((id) => {
+          if (!reservedByTable.has(id)) reservedByTable.set(id, label);
+        });
       });
-    });
     return state.tables.map((t) => {
       const serverOrder = state.serverOrders.find(
         (o) => o.tableIds.includes(t.id) && ACTIVE.includes(o.status),
@@ -906,7 +927,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       const reservedToday = reservedByTable.get(t.id);
       return { ...t, status, ...(reservedToday ? { reservedToday } : {}) };
     });
-  }, [state.tables, state.serverOrders, state.reservations]);
+  }, [state.tables, state.serverOrders, state.reservations, clock]);
 
   // ---------- payload helpers ----------
   const toKotItem = (l: OrderLine, kotNumber?: number): KotCartItem => {
