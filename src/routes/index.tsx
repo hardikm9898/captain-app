@@ -36,7 +36,7 @@ export const Route = createFileRoute("/")({
   component: TableGrid,
 });
 
-const filters: ("all" | TableStatus)[] = ["all", "free", "running", "billed", "reserved"];
+const filters: ("all" | TableStatus)[] = ["all", "free", "running", "held", "billed", "reserved"];
 
 function TableGrid() {
   const {
