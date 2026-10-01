@@ -76,7 +76,8 @@ export const customerApi = {
   // Saved customers whose mobile contains `digits` (controller/customer.js).
   searchByMobile: (digits: string) =>
     http.get<{ numbers: RawCustomer[]; total: number }>(
-      `/customer/getAll?limit=8&search=${encodeURIComponent(digits)}`,
+      // suggest=1: customers whose Autofill is off in Customer Data are left out.
+      `/customer/getAll?limit=8&suggest=1&search=${encodeURIComponent(digits)}`,
     ),
 };
 
