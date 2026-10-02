@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CalendarClock, Phone, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell, ScreenHeader } from "@/components/captain/AppShell";
+import { Chip, ChipRow } from "@/components/captain/Chip";
 import { EmptyState } from "@/components/captain/States";
 import { timeOf } from "@/lib/captain/format";
+import { bookingMoment } from "@/lib/captain/mappers";
 import { useCaptain } from "@/lib/captain/store";
 
 export const Route = createFileRoute("/reservations")({
@@ -20,7 +23,37 @@ export const Route = createFileRoute("/reservations")({
 });
 
 function Reservations() {
-  const { reservations, tableById } = useCaptain();
+  const { reservations: all, tableById } = useCaptain();
+
+  // Owner rule (list 2026-10-02 #2), same as the Web POS: Upcoming until the
+  // booking's END time (one going on now included), soonest first; then
+  // Ended, latest first. A clock tick moves a booking across on time.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  const [tab, setTab] = useState<"upcoming" | "ended">("upcoming");
+  const { upcoming, ended } = useMemo(() => {
+    const timed = all.map((r) => {
+      const start = bookingMoment(r.date, r.time) ?? 0;
+      let end = bookingMoment(r.date, r.endTime) ?? start;
+      // 23:00 -> 01:00 runs past midnight (same rule as the exe).
+      if (end < start) end += 24 * 60 * 60 * 1000;
+      return { r, start, end };
+    });
+    return {
+      upcoming: timed
+        .filter((x) => x.end > clock)
+        .sort((a, b) => a.start - b.start)
+        .map((x) => x.r),
+      ended: timed
+        .filter((x) => x.end <= clock)
+        .sort((a, b) => b.end - a.end)
+        .map((x) => x.r),
+    };
+  }, [all, clock]);
+  const reservations = tab === "upcoming" ? upcoming : ended;
 
   return (
     <AppShell header={<ScreenHeader title="Today's bookings" subtitle="Synced from Web POS" />}>
@@ -28,8 +61,20 @@ function Reservations() {
         Bookings are read-only here. Create or edit reservations from the BillerPe Web POS.
       </p>
 
+      <ChipRow className="mt-3">
+        <Chip active={tab === "upcoming"} onClick={() => setTab("upcoming")}>
+          Upcoming ({upcoming.length})
+        </Chip>
+        <Chip active={tab === "ended"} onClick={() => setTab("ended")}>
+          Ended ({ended.length})
+        </Chip>
+      </ChipRow>
+
       {reservations.length === 0 ? (
-        <EmptyState icon={CalendarClock} title="No bookings today" />
+        <EmptyState
+          icon={CalendarClock}
+          title={tab === "upcoming" ? "No upcoming bookings today" : "No ended bookings today"}
+        />
       ) : (
         <div className="mt-3 space-y-2 md:grid md:grid-cols-2 xl:grid-cols-3 md:gap-2 md:space-y-0">
           {reservations.map((r) => (
