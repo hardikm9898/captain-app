@@ -914,7 +914,11 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     // booking kept its label under a Free table (owner list 2026-09-30 #15).
     const hhmm = (ms: number) =>
       new Date(ms).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
-    const reservedByTable = new Map<string, string>();
+    // A booking that has STARTED holds its table only while the exe still
+    // has the table Reserved: once the guest's order starts there they have
+    // arrived, and the line stayed under the table after their bill was
+    // settled (owner list 2026-10-02 #1).
+    const reservedByTable = new Map<string, { label: string; started: boolean }>();
     state.reservations
       .map((r) => {
         const start = bookingMoment(r.date, r.time);
@@ -928,7 +932,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       .forEach(({ r, start, end }) => {
         const label = `${hhmm(start!)}${end != null ? `–${hhmm(end)}` : ""}`;
         r.tableIds.forEach((id) => {
-          if (!reservedByTable.has(id)) reservedByTable.set(id, label);
+          if (!reservedByTable.has(id)) reservedByTable.set(id, { label, started: start! <= clock });
         });
       });
     return state.tables.map((t) => {
@@ -948,8 +952,17 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
       // table (and even items still in this phone's cart) used to mark it
       // Running on this handset, so a table merely looked at stayed
       // "Running" with nothing ordered.
-      const reservedToday = reservedByTable.get(t.id);
-      return { ...t, status, ...(reservedToday ? { reservedToday } : {}) };
+      const booking = reservedByTable.get(t.id);
+      const reservedToday =
+        booking && (!booking.started || t.status === "reserved") ? booking.label : undefined;
+      // The guest's name is the exe's, and only while it holds the table.
+      const reservedName = t.status === "reserved" ? t.reservedName : undefined;
+      return {
+        ...t,
+        status,
+        reservedName,
+        ...(reservedToday ? { reservedToday } : {}),
+      };
     });
   }, [state.tables, state.serverOrders, state.reservations, clock]);
 
