@@ -39,6 +39,14 @@ export class NetworkError extends ApiError {
   }
 }
 
+/** The outlet's BillerPe plan has ended: the exe refuses with 402 (plan.ts shows the lock). */
+export class PlanLockedError extends ApiError {
+  constructor(message = "Your BillerPe plan has ended") {
+    super(message, { status: 402 });
+    this.name = "PlanLockedError";
+  }
+}
+
 const TOKEN_KEY = "billerpe.captain.token";
 
 export function getStoredToken(): string | null {
@@ -62,6 +70,12 @@ let onUnauthorized: (() => void) | null = null;
 /** The store registers its logout here so an expired session drops straight to /login. */
 export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
+}
+
+let onPlanLocked: ((plan: unknown) => void) | null = null;
+/** plan.ts registers here: any 402 "plan-expired" opens the lock screen. */
+export function setPlanLockedHandler(fn: ((plan: unknown) => void) | null) {
+  onPlanLocked = fn;
 }
 
 const GENERIC_BACKEND_MESSAGES = new Set(["Internal Server Error", "Request failed"]);
@@ -129,6 +143,13 @@ async function request<T>(
   }
 
   const json = (await res.json().catch(() => null)) as unknown;
+  if (res.status === 402) {
+    const j = json as { code?: string; results?: { message?: string; plan?: unknown } } | null;
+    if (j?.code === "plan-expired") {
+      if (j.results?.plan) onPlanLocked?.(j.results.plan);
+      throw new PlanLockedError(j.results?.message || undefined);
+    }
+  }
   if (opts?.raw) {
     if (!res.ok || json === null) throw new ApiError("Request failed", { status: res.status });
     return json as T;

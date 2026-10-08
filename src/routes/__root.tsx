@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import { CaptainProvider, useCaptain } from "@/lib/captain/store";
 import { Toaster } from "@/components/ui/sonner";
 import { LoadingState } from "@/components/captain/States";
+import { PlanLock } from "@/components/captain/PlanLock";
 
 function NotFoundComponent() {
   return (
@@ -121,6 +122,7 @@ function RootComponent() {
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
       </AuthGate>
+      <PlanLock />
       <Toaster position="top-center" />
     </CaptainProvider>
   );

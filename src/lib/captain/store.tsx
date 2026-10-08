@@ -30,6 +30,7 @@ import {
 } from "@/lib/exe/api";
 import {
   ApiError,
+  PlanLockedError,
   UnauthorizedError,
   describeError,
   getStoredToken,
@@ -553,7 +554,8 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     try {
       await loadFloor(true);
     } catch (err) {
-      if (!(err instanceof UnauthorizedError))
+      // An ended plan shows the lock screen (components/captain/PlanLock.tsx), not a toast.
+      if (!(err instanceof UnauthorizedError) && !(err instanceof PlanLockedError))
         toast.error(describeError(err, "Could not refresh from the local server"));
     } finally {
       patch((s) => ({ ...s, refreshing: false }));
@@ -584,7 +586,7 @@ export function CaptainProvider({ children }: { children: ReactNode }) {
     patch((s) => ({ ...s, booting: false }));
     const failed = results.find((r) => r.status === "rejected") as
       PromiseRejectedResult | undefined;
-    if (failed && !(failed.reason instanceof UnauthorizedError)) {
+    if (failed && !(failed.reason instanceof UnauthorizedError) && !(failed.reason instanceof PlanLockedError)) {
       toast.error(describeError(failed.reason, "Could not load outlet data from the local server"));
     }
   }, [loadFloor, loadMenu, loadPermissions, loadReservations, loadSettings, loadStaff, patch]);

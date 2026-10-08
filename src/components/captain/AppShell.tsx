@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Bell, CalendarClock, LayoutGrid, ReceiptText, Soup, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { BlockingConnectionModal, ConnectionStrip } from "./ConnectionStrip";
+import { PlanBanner } from "./PlanLock";
 import { useCaptain } from "@/lib/captain/store";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ export function AppShell({
     <div className={cn("mx-auto flex min-h-screen w-full flex-col bg-background", SHELL_WIDTH)}>
       <div className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
         <ConnectionStrip />
+        <PlanBanner />
         {header}
       </div>
       <main className={cn("flex-1 px-4 pt-3 md:px-6", hideNav ? "pb-6" : "pb-24")}>{children}</main>
