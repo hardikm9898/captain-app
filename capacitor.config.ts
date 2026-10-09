@@ -17,6 +17,8 @@ const config: CapacitorConfig = {
     backgroundColor: "#faf8f5",
   },
   plugins: {
+    // Android 15+ edge to edge: MainActivity pads the app natively (EdgeInsets.java).
+    SystemBars: { insetsHandling: "disable" },
     StatusBar: { style: "LIGHT", backgroundColor: "#ffffff", overlaysWebView: false },
   },
 };
