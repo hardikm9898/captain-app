@@ -32,6 +32,7 @@ import { elapsed, inr } from "@/lib/captain/format";
 import { currentRoundOf, lineTotal, orderTotals, useCaptain, type KotResult } from "@/lib/captain/store";
 import type { MenuItem } from "@/lib/captain/types";
 import { cn } from "@/lib/utils";
+import { initialTone, photoSrc, useMenuPhotos } from "@/lib/captain/photos";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/order/$orderId")({
@@ -54,6 +55,8 @@ const pendingDiscard = new Map<string, ReturnType<typeof setTimeout>>();
 const FAVOURITES = "__favourites";
 
 function OrderMenu() {
+  // Item photos while ordering: the outlet's choice, on by default (owner 2026-10-09).
+  const menuPhotos = useMenuPhotos();
   const { orderId } = Route.useParams();
   const {
     orderById,
@@ -457,17 +460,7 @@ function OrderMenu() {
                     className="flex min-w-0 items-center gap-3 text-left"
                     aria-label={`Add ${item.name}`}
                   >
-                    {item.imageUrl ? (
-                      <img
-                        src={item.imageUrl}
-                        alt=""
-                        loading="lazy"
-                        className="h-12 w-12 shrink-0 rounded-xl object-cover"
-                        onError={(e) =>
-                          ((e.currentTarget as HTMLImageElement).style.display = "none")
-                        }
-                      />
-                    ) : null}
+                    {menuPhotos ? <ItemThumb name={item.name} url={item.imageUrl} /> : null}
                     <span className="min-w-0">
                       <span className="flex items-center gap-2">
                         <span
@@ -674,5 +667,17 @@ function OrderMenu() {
         }}
       />
     </AppShell>
+  );
+}
+
+/** The item's small photo (from the outlet PC), else a coloured initial (owner 2026-10-09). */
+function ItemThumb({ name, url }: { name: string; url?: string | undefined }) {
+  const [broken, setBroken] = useState(false);
+  const src = photoSrc(url);
+  if (src && !broken) return <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} className="h-12 w-12 shrink-0 rounded-xl object-cover" />;
+  return (
+    <span aria-hidden className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-base font-semibold text-foreground/60" style={{ background: initialTone(name) }}>
+      {name.trim().charAt(0).toUpperCase()}
+    </span>
   );
 }
