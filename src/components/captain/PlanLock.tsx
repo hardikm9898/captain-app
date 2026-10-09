@@ -68,7 +68,7 @@ export function PlanLock() {
       className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-background px-5 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]"
     >
       <div className="w-full max-w-sm py-8 text-center">
-        <h1 className="text-xl font-bold text-foreground">Your BillerPe plan has ended</h1>
+        <h1 className="text-xl font-bold text-foreground">{plan.reason === "unpaid" ? "Your payment to BillerPe is pending" : "Your BillerPe plan has ended"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {plan.message || "The software is locked until the plan is renewed."}
         </p>
@@ -85,7 +85,7 @@ export function PlanLock() {
               })
             }
           >
-            {busy === "pay" ? <Loader2 className="animate-spin" /> : <CreditCard />} Renew now (pay online)
+            {busy === "pay" ? <Loader2 className="animate-spin" /> : <CreditCard />} {plan.reason === "unpaid" ? "Pay now (online)" : "Renew now (pay online)"}
           </Button>
           {plan.canExtend ? (
             <Button
